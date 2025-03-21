@@ -11,17 +11,17 @@ import (
 type Header struct {
 	ID uint16
 
-	// 0... .... .... .... = Response: Message is a query,
-	// .000 0... .... .... = Opcode: Standard query (0),
-	// .... .0.. .... .... = Truncated: Message is not truncated,
-	// .... ..1. .... .... = Recursion desired: Do query recursively,
-	// .... ...0 .... .... = Z: reserved (0),
-	// .... .... 0... .... = Non-authenticated data OK: Non-authenticated data is unacceptable.
-	Flags uint16
+	// See RFC 1035 25-27 pages for details
+	// 0... .... .... .... = QR: Message is a query,
+	// .000 0... .... .... = OPCODE: Standard query (0),
+	// .... .0.. .... .... = AA:  Authoritative Answer
+	// .... ..0. .... .... = TC: Message is not truncated,
+	// .... ...1 .... .... = RD: Do query recursively,
+	// .... .... 1... .... = RA: Recursion AvaRecursion Availableilable
+	// .... .... .0.. .... = Z: reserved (0),
+	// .... .... ..00 00.. = RCODE: No error condition
 
-	// 4 bit response code.
-	// Read RFC 1035 page 27 for possible values
-	ResponseCode uint8
+	Flags uint16
 
 	// Specify the number of entries in the question section.
 	QuestionsCount uint16
