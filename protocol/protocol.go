@@ -1,10 +1,11 @@
-// In this file defines DNS messages from RFC 1035
 package protocol
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+)
+
 var (
 	Types = map[string]uint16{
 		"A":     uint16(0),
@@ -24,12 +25,12 @@ var (
 		"MX":    uint16(15),
 		"TXT":   uint16(16),
 	}
+
 	Classes = map[string]uint16{
 		"IN": uint16(1),
 		"CS": uint16(2),
 		"CH": uint16(3),
 		"HS": uint16(4),
-
 	}
 )
 
@@ -79,33 +80,36 @@ type ResourceRecord struct {
 	// Specifies the interval (in seconds) that the resource record may be
 	// cached before it should be discarded.
 	TimeToLive uint32
-	
+
 	DataLen uint16
-	Data []byte
+	Data    []byte
 }
 
 	DataLength uint16
 	Data       []byte
 }
 
-// Read raw request, return request header and slice questions
-func DecodeRequest(request []byte) (*Header, []*ResourceRecord, error) {
+// Read raw request, return request header and slice of questions
+func DecodeRequest(request []byte) (DNSMessage, error) {
+	message := DNSMessage{}
 	reqBuffer := bytes.NewBuffer(request)
 
 	header, err := DecodeHeader(reqBuffer)
 	if err != nil {
-		return header, make([]*ResourceRecord, 0), fmt.Errorf("decode request: %w", err)
+		return message, fmt.Errorf("decode request: %w", err)
 	}
+	message.head = header
 
 	questions := make([]*ResourceRecord, header.QuestionsCount)
 	for i := range questions {
 		questions[i], err = DecodeRecordBody(reqBuffer)
 		if err != nil {
-			return header, questions, fmt.Errorf("decode request: %w", err)
+			return message, fmt.Errorf("decode request: %w", err)
 		}
 	}
+	message.Questions = questions
 
-	return header, questions, nil
+	return message, nil
 }
 
 // Read from reader a undecoded binary header
