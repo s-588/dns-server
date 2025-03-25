@@ -34,7 +34,7 @@ var (
 )
 
 type DNSMessage struct {
-	Header
+	head        *Header
 	Questions   []*ResourceRecord
 	Answers     []*ResourceRecord
 	Authorities []*ResourceRecord
