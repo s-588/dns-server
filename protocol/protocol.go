@@ -109,6 +109,33 @@ func DecodeRequest(request []byte) (DNSMessage, error) {
 	}
 	message.Questions = questions
 
+	answers := make([]*ResourceRecord, header.AnswersCount)
+	for i := range answers {
+		answers[i], err = DecodeRecordBody(reqBuffer)
+		if err != nil {
+			return message, fmt.Errorf("decode request: %w", err)
+		}
+	}
+	message.Answers = answers
+
+	authorities := make([]*ResourceRecord, header.AnswersCount)
+	for i := range authorities {
+		authorities[i], err = DecodeRecordBody(reqBuffer)
+		if err != nil {
+			return message, fmt.Errorf("decode request: %w", err)
+		}
+	}
+	message.Authorities = authorities
+
+	additionals := make([]*ResourceRecord, header.AdditionalCount)
+	for i := range authorities {
+		additionals[i], err = DecodeRecordBody(reqBuffer)
+		if err != nil {
+			return message, fmt.Errorf("decode request: %w", err)
+		}
+	}
+	message.Additionals = additionals
+
 	return message, nil
 }
 
