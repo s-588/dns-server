@@ -5,6 +5,32 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+var (
+	Types = map[string]uint16{
+		"A":     uint16(0),
+		"NS":    uint16(2),
+		"MD":    uint16(3),
+		"MF":    uint16(4),
+		"CNAME": uint16(5),
+		"SOA":   uint16(6),
+		"MB":    uint16(7),
+		"MG":    uint16(8),
+		"MR":    uint16(9),
+		"NULL":  uint16(10),
+		"WKS":   uint16(11),
+		"PTR":   uint16(12),
+		"HINFO": uint16(13),
+		"MINFO": uint16(14),
+		"MX":    uint16(15),
+		"TXT":   uint16(16),
+	}
+	Classes = map[string]uint16{
+		"IN": uint16(1),
+		"CS": uint16(2),
+		"CH": uint16(3),
+		"HS": uint16(4),
+
+	}
 )
 
 // Represent header of any message
