@@ -43,9 +43,13 @@ type ResourceRecord struct {
 	Type   uint16
 	Class  uint16
 
-	// specifies the interval (in seconds) that the resource record may be
+	// Specifies the interval (in seconds) that the resource record may be
 	// cached before it should be discarded.
-	TTL uint32
+	TimeToLive uint32
+	
+	DataLen uint16
+	Data []byte
+}
 
 	DataLength uint16
 	Data       []byte
