@@ -33,7 +33,14 @@ var (
 	}
 )
 
-// Represent header of any message
+type DNSMessage struct {
+	Header
+	Questions   []*ResourceRecord
+	Answers     []*ResourceRecord
+	Authorities []*ResourceRecord
+	Additionals []*ResourceRecord
+}
+
 type Header struct {
 	ID uint16
 
