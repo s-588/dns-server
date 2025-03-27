@@ -99,38 +99,38 @@ func DecodeRequest(request []byte) (DNSMessage, error) {
 	if err != nil {
 		return message, fmt.Errorf("decode request: %w", err)
 	}
-	message.head = header
+	message.Head = header
 
-	questions := make([]*ResourceRecord, header.QuestionsCount)
+	questions := make([]*RR, header.QuestionsCount)
 	for i := range questions {
-		questions[i], err = DecodeRecordBody(reqBuffer)
+		questions[i], err = DecodeQuestion(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
 	}
 	message.Questions = questions
 
-	answers := make([]*ResourceRecord, header.AnswersCount)
+	answers := make([]*RR, header.AnswersCount)
 	for i := range answers {
-		answers[i], err = DecodeRecordBody(reqBuffer)
+		answers[i], err = DecodeQuestion(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
 	}
 	message.Answers = answers
 
-	authorities := make([]*ResourceRecord, header.AnswersCount)
+	authorities := make([]*RR, header.AnswersCount)
 	for i := range authorities {
-		authorities[i], err = DecodeRecordBody(reqBuffer)
+		authorities[i], err = DecodeQuestion(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
 	}
 	message.Authorities = authorities
 
-	additionals := make([]*ResourceRecord, header.AdditionalCount)
-	for i := range authorities {
-		additionals[i], err = DecodeRecordBody(reqBuffer)
+	additionals := make([]*RR, header.AdditionalCount)
+	for i := range additionals {
+		additionals[i], err = DecodeQuestion(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
@@ -150,10 +150,11 @@ func DecodeHeader(buffer *bytes.Buffer) (*Header, error) {
 	return header, nil
 }
 
-// Read domain, type and class from request buffer.
+// Read only question fields: domain, type and class from request buffer.
 // Must be used after the header was readed.
-func DecodeRecordBody(buffer *bytes.Buffer) (*ResourceRecord, error) {
-	body := &ResourceRecord{}
+func DecodeQuestion(buffer *bytes.Buffer) (*RR, error) {
+	body := &RR{}
+
 	// RFC 1035: "a domain name represented as a sequence of labels, where
 	// each label consists of a length octet followed by that
 	// number of octets."
@@ -174,8 +175,8 @@ func DecodeRecordBody(buffer *bytes.Buffer) (*ResourceRecord, error) {
 }
 
 // Read all resource record fields from request buffer.
-func DecodeRR(buffer *bytes.Buffer) (*ResourceRecord, error) {
-	body := &ResourceRecord{}
+func DecodeRR(buffer *bytes.Buffer) (*RR, error) {
+	body := &RR{}
 
 	domainLen, err := buffer.ReadByte()
 	if err != nil {
