@@ -88,6 +88,40 @@ type RR struct {
 
 	DataLength uint16
 	Data       []byte
+func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
+	err := EncodeDomain(buffer, rr.Domain)
+	if err != nil {
+		return fmt.Errorf("encode RR: %w", err)
+	}
+
+	err = binary.Write(buffer, binary.BigEndian, rr.Type)
+	if err != nil {
+		return fmt.Errorf("encode RR type: %w", err)
+	}
+
+	err = binary.Write(buffer, binary.BigEndian, rr.Class)
+	if err != nil {
+		return fmt.Errorf("encode RR class: %w", err)
+	}
+
+	err = binary.Write(buffer, binary.BigEndian, rr.TimeToLive)
+	if err != nil {
+		return fmt.Errorf("encode RR TTL: %w", err)
+	}
+
+	err = binary.Write(buffer, binary.BigEndian, rr.DataLen)
+	if err != nil {
+		return fmt.Errorf("encode RR data len: %w", err)
+	}
+
+	err = binary.Write(buffer, binary.BigEndian, rr.Data)
+	if err != nil {
+		return fmt.Errorf("encode RR data: %w", err)
+	}
+
+	return nil
+}
+
 func EncodeDomain(buffer *bytes.Buffer, domain string) error {
 	err := buffer.WriteByte(byte(len(domain)))
 	if err != nil {
@@ -207,7 +241,10 @@ func DecodeRR(buffer *bytes.Buffer) (*RR, error) {
 	body.DataLen = binary.BigEndian.Uint16(buffer.Next(2))
 
 	data := make([]byte, body.DataLen)
-	binary.Decode(buffer.Bytes(), binary.BigEndian, data)
+	_, err = binary.Decode(buffer.Bytes(), binary.BigEndian, data)
+	if err != err {
+		return body, err
+	}
 	body.Data = data
 
 	return body, nil
