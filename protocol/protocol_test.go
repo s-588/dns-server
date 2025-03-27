@@ -11,7 +11,6 @@ func TestDecodeHeader(t *testing.T) {
 		{
 			ID:              1,
 			Flags:           uint16(0b0000_0000_0000_0000),
-			ResponseCode:    uint8(0b0000_0000),
 			QuestionsCount:  0,
 			AnswersCount:    0,
 			AuthorityCount:  0,
@@ -20,7 +19,6 @@ func TestDecodeHeader(t *testing.T) {
 		{
 			ID:              2,
 			Flags:           uint16(0b1101_0100_1000_0000),
-			ResponseCode:    uint8(0b1111_0000),
 			QuestionsCount:  1,
 			AnswersCount:    2,
 			AuthorityCount:  3,
@@ -29,7 +27,6 @@ func TestDecodeHeader(t *testing.T) {
 		{
 			ID:              3,
 			Flags:           uint16(0b0000_0000_0000_0000),
-			ResponseCode:    uint8(0b0000_0000),
 			QuestionsCount:  3,
 			AnswersCount:    1,
 			AuthorityCount:  0,
@@ -57,7 +54,7 @@ func TestDecodeHeader(t *testing.T) {
 }
 
 func TestDecodeRecordBody(t *testing.T) {
-	records := []*ResourceRecord{
+	records := []*RR{
 		{
 			Domain: "10google.com",
 			Type:   binary.BigEndian.Uint16([]byte("A0")),
@@ -76,7 +73,7 @@ func TestDecodeRecordBody(t *testing.T) {
 		}
 		buffer := bytes.NewBuffer(data)
 
-		result, err := DecodeRecordBody(buffer)
+		result, err := DecodeRR(buffer)
 		if err != nil {
 			t.Errorf("function return error, but must not: %v", err)
 		}

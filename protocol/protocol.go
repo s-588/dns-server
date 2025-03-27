@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"log"
 )
 
 var (
 	Types = map[string]uint16{
-		"A":     uint16(0),
+		"A":     uint16(1),
 		"NS":    uint16(2),
 		"MD":    uint16(3),
 		"MF":    uint16(4),
