@@ -88,6 +88,18 @@ type RR struct {
 
 	DataLength uint16
 	Data       []byte
+func EncodeDomain(buffer *bytes.Buffer, domain string) error {
+	err := buffer.WriteByte(byte(len(domain)))
+	if err != nil {
+		return fmt.Errorf("encode domain len: %w", err)
+	}
+
+	_, err = buffer.WriteString(domain)
+	if err != nil {
+		return fmt.Errorf("encode domain: %w", err)
+	}
+
+	return nil
 }
 
 // Read raw request, return request header and slice of questions
