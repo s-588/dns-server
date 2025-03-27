@@ -4,48 +4,55 @@ import (
 	"log/slog"
 	"net"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/prionis/dns-server/protocol"
 	"github.com/prionis/dns-server/sqlite"
 )
 
 type Server struct {
-	port    string
-	udpConn *net.UDPConn
-	db      sqlite.DB
+	port string
+	db   sqlite.DB
 }
 
-func NewServer(port string) (*Server, error) {
-	addr, err := net.ResolveUDPAddr("udp", port)
+func NewServer(port string) (Server, error) {
+	s := Server{}
+
+	db, err := sqlite.NewDB()
 	if err != nil {
-		return nil, err
+		return s, err
+	}
+	slog.Info("connection with database established")
+
+	s = Server{
+		port: port,
+		db:   db,
+	}
+	slog.Info("server created")
+	return s, nil
+}
+
+func (s Server) Start() error {
+	slog.Info("server started")
+
+	addr, err := net.ResolveUDPAddr("udp", s.port)
+	if err != nil {
+		return err
 	}
 
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	db, err := sqlite.NewDB()
-	if err != nil {
-		return nil, err
-	}
-
-	return &Server{
-		port:    port,
-		udpConn: conn,
-		db:      db,
-	}, nil
-}
-
-func (s *Server) Start() error {
 	for {
 		data := make([]byte, 512)
-		_, err := s.udpConn.Read(data)
+		_, addr, err := conn.ReadFromUDP(data)
 		if err != nil {
-			slog.Error("read from connection", "err", err)
+			slog.Error("read from udp conn", "err", err)
+			continue
 		}
+		go s.handleRequest(data, conn, addr)
+	}
+}
 
 func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr) {
 	message, err := protocol.DecodeRequest(data)
