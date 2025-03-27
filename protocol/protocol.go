@@ -86,8 +86,68 @@ type RR struct {
 	Data    []byte
 }
 
-	DataLength uint16
-	Data       []byte
+// Encode header and answers, return encoded bytes
+func EncodeResponse(message DNSMessage) ([]byte, error) {
+	response := bytes.NewBuffer(make([]byte, 0))
+
+	log.Println(message.Head)
+	header := Header{
+		ID:              uint16(message.Head.ID),
+		Flags:           uint16(1 << 15),
+		QuestionsCount:  message.Head.QuestionsCount,
+		AnswersCount:    uint16(len(message.Answers)),
+		AuthorityCount:  uint16(len(message.Authorities)),
+		AdditionalCount: uint16(len(message.Additionals)),
+	}
+	log.Println(header)
+
+	err := binary.Write(response, binary.BigEndian, &header)
+	if err != nil {
+		return response.Bytes(), err
+	}
+	log.Println(response.Bytes())
+
+	for _, question := range message.Questions {
+		err := EncodeDomain(response, question.Domain)
+		if err != nil {
+			return response.Bytes(), err
+		}
+
+		err = binary.Write(response, binary.BigEndian, question.Type)
+		if err != nil {
+			return response.Bytes(), err
+		}
+
+		err = binary.Write(response, binary.BigEndian, question.Class)
+		if err != nil {
+			return response.Bytes(), err
+		}
+	}
+
+	for _, answer := range message.Answers {
+		err := EncodeRR(response, answer)
+		if err != nil {
+			return response.Bytes(), err
+		}
+	}
+
+	for _, authority := range message.Authorities {
+		err := EncodeRR(response, authority)
+		if err != nil {
+			return response.Bytes(), err
+		}
+	}
+
+	for _, addition := range message.Additionals {
+		err := EncodeRR(response, addition)
+		if err != nil {
+			return response.Bytes(), err
+		}
+	}
+
+	return response.Bytes(), nil
+}
+
 func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
 	err := EncodeDomain(buffer, rr.Domain)
 	if err != nil {
