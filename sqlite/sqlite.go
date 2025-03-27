@@ -6,7 +6,11 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
+
+	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/prionis/dns-server/protocol"
 	"github.com/prionis/dns-server/sqlite/query"
@@ -17,7 +21,12 @@ type DB struct {
 }
 
 func NewDB() (DB, error) {
-	conn, err := sql.Open("sqlite", "resourceRecords")
+	conn, err := sql.Open("sqlite", "RRs.db")
+	if err != nil {
+		return DB{}, err
+	}
+	log.Println(conn)
+
 	if err = conn.Ping(); err != nil {
 		return DB{}, err
 	}
@@ -28,8 +37,8 @@ func NewDB() (DB, error) {
 	}, nil
 }
 
-func (db DB) GetResourceRecord(name string) ([]protocol.ResourceRecord, error) {
-	resourceRecords := make([]protocol.ResourceRecord, 0)
+func (db DB) GetResourceRecord(name string) ([]*protocol.RR, error) {
+	resourceRecords := make([]*protocol.RR, 0)
 
 	rrs, err := db.queries.GetResourceRecord(context.Background(), name)
 	if err != nil {
@@ -48,7 +57,7 @@ func (db DB) GetResourceRecord(name string) ([]protocol.ResourceRecord, error) {
 			return resourceRecords, fmt.Errorf("uknown class %s", record.Type)
 		}
 
-		resourceRecords = append(resourceRecords, protocol.ResourceRecord{
+		resourceRecords = append(resourceRecords, &protocol.RR{
 			Domain:     record.Domain,
 			Type:       t,
 			Class:      c,
@@ -56,6 +65,9 @@ func (db DB) GetResourceRecord(name string) ([]protocol.ResourceRecord, error) {
 			DataLen:    uint16(len(record.Result)),
 			Data:       []byte(record.Result),
 		})
+	}
+	if len(resourceRecords) <= 0 {
+		return resourceRecords, errors.New("not found")
 	}
 	return resourceRecords, nil
 }
