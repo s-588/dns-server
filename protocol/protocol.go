@@ -171,3 +171,30 @@ func DecodeRecordBody(buffer *bytes.Buffer) (*ResourceRecord, error) {
 
 	return body, nil
 }
+
+// Read all resource record fields from request buffer.
+func DecodeRR(buffer *bytes.Buffer) (*ResourceRecord, error) {
+	body := &ResourceRecord{}
+
+	domainLen, err := buffer.ReadByte()
+	if err != nil {
+		return body, fmt.Errorf("decode body: %w", err)
+	}
+
+	domainBytes := make([]byte, domainLen)
+	if _, err := buffer.Read(domainBytes); err != nil {
+		return body, fmt.Errorf("decode body: %w", err)
+	}
+
+	body.Domain = string(domainBytes)
+	body.Type = binary.BigEndian.Uint16(buffer.Next(2))
+	body.Class = binary.BigEndian.Uint16(buffer.Next(2))
+	body.TimeToLive = binary.BigEndian.Uint32(buffer.Next(4))
+	body.DataLen = binary.BigEndian.Uint16(buffer.Next(2))
+
+	data := make([]byte, body.DataLen)
+	binary.Decode(buffer.Bytes(), binary.BigEndian, data)
+	body.Data = data
+
+	return body, nil
+}
