@@ -35,11 +35,11 @@ var (
 )
 
 type DNSMessage struct {
-	head        *Header
-	Questions   []*ResourceRecord
-	Answers     []*ResourceRecord
-	Authorities []*ResourceRecord
-	Additionals []*ResourceRecord
+	Head        *Header
+	Questions   []*RR
+	Answers     []*RR
+	Authorities []*RR
+	Additionals []*RR
 }
 
 type Header struct {
@@ -72,7 +72,8 @@ type Header struct {
 	AdditionalCount uint16
 }
 
-type ResourceRecord struct {
+// Represent resource record
+type RR struct {
 	Domain string
 	Type   uint16
 	Class  uint16
