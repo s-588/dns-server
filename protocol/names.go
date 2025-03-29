@@ -24,12 +24,15 @@ func ValidateDomain(domain string) error {
 }
 
 func ValidateLabel(label string) error {
-	regexp, err := regexp.Compile("^[a-z1-9]+(-[a-z1-9]+)*$")
+	if len(label) > 63 {
+		return errors.New("label is too long")
+	}
+	ok, err := regexp.MatchString("^[a-z1-9]+(-[a-z1-9]+)*$", label)
 	if err != nil {
 		return err
 	}
-	if !regexp.MatchString(label) {
-		return fmt.Errorf("label \"%s\" does not match RFC 1035 standart", label)
+	if !ok {
+		return fmt.Errorf("label \"%s\" does not match RFC 1035 standard", label)
 	}
 
 	return nil
