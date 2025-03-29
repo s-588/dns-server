@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 var (
@@ -91,7 +91,6 @@ type RR struct {
 func EncodeResponse(message DNSMessage) ([]byte, error) {
 	response := bytes.NewBuffer(make([]byte, 0))
 
-	log.Println(message.Head)
 	header := Header{
 		ID:              uint16(message.Head.ID),
 		Flags:           uint16(1 << 15),
@@ -100,13 +99,11 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 		AuthorityCount:  uint16(len(message.Authorities)),
 		AdditionalCount: uint16(len(message.Additionals)),
 	}
-	log.Println(header)
 
 	err := binary.Write(response, binary.BigEndian, &header)
 	if err != nil {
 		return response.Bytes(), err
 	}
-	log.Println(response.Bytes())
 
 	for _, question := range message.Questions {
 		err := EncodeDomain(question.Domain, response)
@@ -150,6 +147,7 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 }
 
 func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
+	slog.Info("encoding record", "domain", rr.Domain, "data", string(rr.Data))
 	err := EncodeDomain(rr.Domain, buffer)
 	if err != nil {
 		return fmt.Errorf("encode RR: %w", err)
