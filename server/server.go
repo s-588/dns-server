@@ -62,6 +62,9 @@ func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr)
 	}
 
 	slog.Info("message processed", "head", message.Head)
+	for _, q := range message.Questions {
+		slog.Info("asked question", "question", q)
+	}
 
 	for _, question := range message.Questions {
 		slog.Info("searching for domain", "domain", question.Domain)
