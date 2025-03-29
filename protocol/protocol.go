@@ -109,7 +109,7 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	log.Println(response.Bytes())
 
 	for _, question := range message.Questions {
-		err := EncodeDomain(response, question.Domain)
+		err := EncodeDomain(question.Domain, response)
 		if err != nil {
 			return response.Bytes(), err
 		}
@@ -150,7 +150,7 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 }
 
 func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
-	err := EncodeDomain(buffer, rr.Domain)
+	err := EncodeDomain(rr.Domain, buffer)
 	if err != nil {
 		return fmt.Errorf("encode RR: %w", err)
 	}
@@ -183,20 +183,6 @@ func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
 	return nil
 }
 
-func EncodeDomain(buffer *bytes.Buffer, domain string) error {
-	err := buffer.WriteByte(byte(len(domain)))
-	if err != nil {
-		return fmt.Errorf("encode domain len: %w", err)
-	}
-
-	_, err = buffer.WriteString(domain)
-	if err != nil {
-		return fmt.Errorf("encode domain: %w", err)
-	}
-
-	return nil
-}
-
 // Read raw request, return request header and slice of questions
 func DecodeRequest(request []byte) (DNSMessage, error) {
 	message := DNSMessage{}
@@ -219,7 +205,7 @@ func DecodeRequest(request []byte) (DNSMessage, error) {
 
 	answers := make([]*RR, header.AnswersCount)
 	for i := range answers {
-		answers[i], err = DecodeQuestion(reqBuffer)
+		answers[i], err = DecodeRR(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
@@ -228,7 +214,7 @@ func DecodeRequest(request []byte) (DNSMessage, error) {
 
 	authorities := make([]*RR, header.AnswersCount)
 	for i := range authorities {
-		authorities[i], err = DecodeQuestion(reqBuffer)
+		authorities[i], err = DecodeRR(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
@@ -237,7 +223,7 @@ func DecodeRequest(request []byte) (DNSMessage, error) {
 
 	additionals := make([]*RR, header.AdditionalCount)
 	for i := range additionals {
-		additionals[i], err = DecodeQuestion(reqBuffer)
+		additionals[i], err = DecodeRR(reqBuffer)
 		if err != nil {
 			return message, fmt.Errorf("decode request: %w", err)
 		}
@@ -262,19 +248,11 @@ func DecodeHeader(buffer *bytes.Buffer) (*Header, error) {
 func DecodeQuestion(buffer *bytes.Buffer) (*RR, error) {
 	body := &RR{}
 
-	// RFC 1035: "a domain name represented as a sequence of labels, where
-	// each label consists of a length octet followed by that
-	// number of octets."
-	domainLen, err := buffer.ReadByte()
+	domain, err := DecodeDomain(buffer)
 	if err != nil {
-		return body, fmt.Errorf("decode body: %w", err)
+		return body, err
 	}
-
-	domainBytes := make([]byte, domainLen)
-	if _, err := buffer.Read(domainBytes); err != nil {
-		return body, fmt.Errorf("decode body: %w", err)
-	}
-	body.Domain = string(domainBytes)
+	body.Domain = domain
 	body.Type = binary.BigEndian.Uint16(buffer.Next(2))
 	body.Class = binary.BigEndian.Uint16(buffer.Next(2))
 

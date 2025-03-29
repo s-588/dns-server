@@ -9,17 +9,17 @@ import (
 )
 
 func ValidateDomain(domain string) error {
-	if len(domain) > 253 {
+	if len(domain) > 255 {
 		return errors.New("domain name is too long")
 	}
 
 	labels := strings.Split(domain, ".")
-
 	for _, label := range labels {
 		if err := ValidateLabel(label); err != nil {
 			return fmt.Errorf("validate domain: %w", err)
 		}
 	}
+
 	return nil
 }
 
