@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 
 	_ "github.com/glebarez/go-sqlite"
 
@@ -25,7 +24,6 @@ func NewDB() (DB, error) {
 	if err != nil {
 		return DB{}, err
 	}
-	log.Println(conn)
 
 	if err = conn.Ping(); err != nil {
 		return DB{}, err
