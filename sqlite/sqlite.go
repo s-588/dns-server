@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 
 	_ "github.com/glebarez/go-sqlite"
 
@@ -60,8 +61,8 @@ func (db DB) GetResourceRecord(name string) ([]*protocol.RR, error) {
 			Type:       t,
 			Class:      c,
 			TimeToLive: uint32(record.Ttl.Int64),
-			DataLen:    uint16(len(record.Result)),
-			Data:       []byte(record.Result),
+			DataLen:    4,
+			Data:       net.ParseIP(record.Result).To4(),
 		})
 	}
 	if len(resourceRecords) <= 0 {
