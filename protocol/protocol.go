@@ -100,13 +100,17 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 		AdditionalCount: uint16(len(message.Additionals)),
 	}
 
+	slog.Info("write header", "header", header)
+
+	header.AdditionalCount = 0
 	err := binary.Write(response, binary.BigEndian, &header)
 	if err != nil {
 		return response.Bytes(), err
 	}
 
 	for _, question := range message.Questions {
-		err := EncodeDomain(question.Domain, response)
+		slog.Info("writing question", "q", *question)
+		err := WriteDomainName(question.Domain, response)
 		if err != nil {
 			return response.Bytes(), err
 		}
@@ -123,6 +127,7 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	}
 
 	for _, answer := range message.Answers {
+		slog.Info("writing answer", "a", *answer)
 		err := EncodeRR(response, answer)
 		if err != nil {
 			return response.Bytes(), err
@@ -130,25 +135,27 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	}
 
 	for _, authority := range message.Authorities {
+		slog.Info("writing authority", "a", *authority)
 		err := EncodeRR(response, authority)
 		if err != nil {
 			return response.Bytes(), err
 		}
 	}
 
-	for _, addition := range message.Additionals {
-		err := EncodeRR(response, addition)
-		if err != nil {
-			return response.Bytes(), err
-		}
-	}
-
+	// for _, addition := range message.Additionals {
+	// 	slog.Info("writing addition", "a", *addition)
+	// 	err := EncodeRR(response, addition)
+	// 	if err != nil {
+	// 		return response.Bytes(), err
+	// 	}
+	// }
+	slog.Info("response is", "hex", fmt.Sprintf("%x", response.Bytes()), "byte", fmt.Sprintf("%v", response.Bytes()))
 	return response.Bytes(), nil
 }
 
 func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
-	slog.Info("encoding record", "domain", rr.Domain, "data", string(rr.Data))
-	err := EncodeDomain(rr.Domain, buffer)
+	slog.Info("encoding record", "domain", rr.Domain, "string data", string(rr.Data), "byte data", fmt.Sprintf("%v", rr.Data))
+	err := WriteDomainName(rr.Domain, buffer)
 	if err != nil {
 		return fmt.Errorf("encode RR: %w", err)
 	}
@@ -210,7 +217,7 @@ func DecodeRequest(request []byte) (DNSMessage, error) {
 	}
 	message.Answers = answers
 
-	authorities := make([]*RR, header.AnswersCount)
+	authorities := make([]*RR, header.AuthorityCount)
 	for i := range authorities {
 		authorities[i], err = DecodeRR(reqBuffer)
 		if err != nil {
@@ -246,7 +253,7 @@ func DecodeHeader(buffer *bytes.Buffer) (*Header, error) {
 func DecodeQuestion(buffer *bytes.Buffer) (*RR, error) {
 	body := &RR{}
 
-	domain, err := DecodeDomain(buffer)
+	domain, err := ReadDomainName(buffer)
 	if err != nil {
 		return body, err
 	}
@@ -261,26 +268,24 @@ func DecodeQuestion(buffer *bytes.Buffer) (*RR, error) {
 func DecodeRR(buffer *bytes.Buffer) (*RR, error) {
 	body := &RR{}
 
-	domainLen, err := buffer.ReadByte()
+	domain, err := ReadDomainName(buffer)
 	if err != nil {
-		return body, fmt.Errorf("decode body: %w", err)
+		return body, err
 	}
+	body.Domain = domain
 
-	domainBytes := make([]byte, domainLen)
-	if _, err := buffer.Read(domainBytes); err != nil {
-		return body, fmt.Errorf("decode body: %w", err)
-	}
-
-	body.Domain = string(domainBytes)
 	body.Type = binary.BigEndian.Uint16(buffer.Next(2))
 	body.Class = binary.BigEndian.Uint16(buffer.Next(2))
 	body.TimeToLive = binary.BigEndian.Uint32(buffer.Next(4))
 	body.DataLen = binary.BigEndian.Uint16(buffer.Next(2))
 
 	data := make([]byte, body.DataLen)
-	_, err = binary.Decode(buffer.Bytes(), binary.BigEndian, data)
-	if err != err {
-		return body, err
+	n, err := buffer.Read(data)
+	if err != nil {
+		return body, fmt.Errorf("decode RR data: %w", err)
+	}
+	if n != int(body.DataLen) {
+		return body, fmt.Errorf("decode RR data: expected %d bytes, read %d", body.DataLen, n)
 	}
 	body.Data = data
 
