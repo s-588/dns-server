@@ -1,17 +1,17 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/prionis/dns-server/server"
 )
 
 func main() {
-	s, err := server.NewServer(":1053")
+	s, err := server.NewServer(":53")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("critical error", "err", err)
 		os.Exit(1)
 	}
-	log.Fatal(s.Start())
+	slog.Error("critical error", "err", s.Start())
 }

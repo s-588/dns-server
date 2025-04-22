@@ -58,24 +58,6 @@ func ReadDomainName(buffer *bytes.Buffer) (string, error) {
 	return domainName, err
 }
 
-//	func DecodeDomain(buffer *bytes.Buffer) (string, error) {
-//		domainParts := make([]string, 0)
-//
-//		// RFC 1035: "a domain name represented as a sequence of labels, where
-//		// each label consists of a length octet followed by that
-//		// number of octets."
-//		b, err := buffer.ReadByte()
-//		if err != nil {
-//			return "", err
-//		}
-//
-//		for ; b != 0 && err == nil; b, err = buffer.ReadByte() {
-//			domainBytes := buffer.Next(int(b))
-//			domainParts = append(domainParts, string(domainBytes))
-//		}
-//		domain := strings.Join(domainParts, ".")
-//		return domain, ValidateDomain(domain)
-//	}
 func WriteDomainName(domainName string, responseBuffer *bytes.Buffer) error {
 	labels := strings.Split(domainName, ".")
 
@@ -91,26 +73,3 @@ func WriteDomainName(domainName string, responseBuffer *bytes.Buffer) error {
 
 	return err
 }
-
-// func EncodeDomain(domain string, buffer *bytes.Buffer) error {
-// 	if err := ValidateDomain(domain); err != nil {
-// 		return err
-// 	}
-//
-// 	err := buffer.WriteByte(byte(len(domain)))
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	_, err = buffer.WriteString(domain)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	err = buffer.WriteByte(0)
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	return nil
-// }

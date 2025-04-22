@@ -2,83 +2,146 @@ package protocol
 
 import (
 	"bytes"
-	"encoding/binary"
+	"errors"
+	"slices"
 	"testing"
 )
 
-func TestDecodeHeader(t *testing.T) {
-	headers := []*Header{
-		{
-			ID:              1,
-			Flags:           uint16(0b0000_0000_0000_0000),
-			QuestionsCount:  0,
-			AnswersCount:    0,
-			AuthorityCount:  0,
-			AdditionalCount: 0,
+type encodeRRtest struct {
+	name string
+	rr   *RR
+	get  *bytes.Buffer
+	want *bytes.Buffer
+	err  error
+}
+
+var encodeRRtests = []encodeRRtest{
+	{
+		"normal resource record",
+		&RR{
+			"example.com",
+			Types["A"],
+			Classes["IN"],
+			3600,
+			4,
+			[]byte{1, 1, 1, 1},
 		},
-		{
-			ID:              2,
-			Flags:           uint16(0b1101_0100_1000_0000),
-			QuestionsCount:  1,
-			AnswersCount:    2,
-			AuthorityCount:  3,
-			AdditionalCount: 0,
+		bytes.NewBuffer([]byte{}),
+		bytes.NewBuffer([]byte{
+			7, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+			3, 'c', 'o', 'm',
+			0,
+			0, 1,
+			0, 1,
+			0, 0, 14, 16,
+			0, 4,
+			1, 1, 1, 1,
+		}),
+		nil,
+	},
+	{
+		"wrong resource record",
+		&RR{
+			"example..com",
+			Types["A"],
+			Classes["IN"],
+			3600,
+			4,
+			[]byte{1, 1, 1, 1},
 		},
-		{
-			ID:              3,
-			Flags:           uint16(0b0000_0000_0000_0000),
-			QuestionsCount:  3,
-			AnswersCount:    1,
-			AuthorityCount:  0,
-			AdditionalCount: 9,
-		},
-	}
-	for _, h := range headers {
-		data := make([]byte, 13)
-		n, err := binary.Encode(data, binary.BigEndian, h)
-		if err != nil {
-			t.Errorf("can't encode header to binary format: %v", err)
-		}
-		if n != 13 {
-			t.Errorf("header was encoded wrong, count of writen bytes must be 13, n = %d", n)
+		bytes.NewBuffer([]byte{}),
+		bytes.NewBuffer([]byte{
+			7, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+			3, 'c', 'o', 'm',
+			0,
+			0, 1,
+			0, 1,
+			0, 0, 14, 16,
+			0, 4,
+			1, 1, 1, 1,
+		}),
+		errors.New("wrong label"),
+	},
+}
+
+func TestEncodeRR(t *testing.T) {
+	for _, test := range encodeRRtests {
+		err := EncodeRR(test.get, test.rr)
+		if err != nil && test.err == nil {
+			t.Errorf("%s test: unexpected error: %v", test.name, test.err)
 		}
 
-		header, err := DecodeHeader(bytes.NewBuffer(data))
-		if err != nil {
-			t.Errorf("function return error, but must not: %v", err)
-		}
-		if *header != *h {
-			t.Errorf("Processed header not equals original:\n%v\n%v", header, h)
+		if !slices.Equal(test.get.Bytes(), test.want.Bytes()) && test.err == nil {
+			t.Errorf("%s test: \nget:  %x\nwant: %x", test.name, test.get, test.want)
 		}
 	}
 }
 
-func TestDecodeRecordBody(t *testing.T) {
-	records := []*RR{
-		{
-			Domain: "10google.com",
-			Type:   binary.BigEndian.Uint16([]byte("A0")),
-			Class:  binary.BigEndian.Uint16([]byte("IN")),
-		},
-	}
-	for _, r := range records {
-		data := make([]byte, len(r.Domain)+4)
-		n, err := binary.Encode(data, binary.BigEndian, r)
-		if err != nil {
-			t.Errorf("can't encode record body to binary format: %v", err)
-		}
-		if n != len(r.Domain)+4 {
-			t.Errorf("record body was encoded wrong,"+
-				" count of writen bytes must be %d, n = %d", len(r.Domain)+4, n)
-		}
-		buffer := bytes.NewBuffer(data)
+type encodeResponseTest struct {
+	name    string
+	dnsmsg  DNSMessage
+	wantBuf []byte
+	wantErr error
+}
 
-		result, err := DecodeRR(buffer)
-		if err != nil {
-			t.Errorf("function return error, but must not: %v", err)
+var encodeResponseTests = []encodeResponseTest{
+	{
+		"normal message",
+		DNSMessage{
+			Head: &Header{
+				ID:             0x1234,
+				Flags:          0x8180, // standard response flags
+				QuestionsCount: 1,
+			},
+			Questions: []*RR{
+				{
+					Domain: "example.com",
+					Type:   1, // A record
+					Class:  1, // IN
+				},
+			},
+			Answers: []*RR{
+				{
+					Domain:     "example.com",
+					Type:       1,
+					Class:      1,
+					TimeToLive: 300,
+					Data:       []byte{127, 0, 0, 1},
+				},
+			},
+		},
+		[]byte{
+			// Header
+			0x00, 0x01, // id
+			0x81, 0x80, // flags
+			0x00, 0x01, // count of questions
+			0x00, 0x01, // count of answers
+			0x00, 0x00, // count of authority
+			0x00, 0x00, // count of addittions
+			0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, // Question
+			0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x01, 0x2c, 0x00, 0x04, 0x7f, 0x00, 0x00, 0x01, // Answer
+		},
+		nil,
+	},
+}
+
+func TestEncodeResponse(t *testing.T) {
+	for _, test := range encodeResponseTests {
+		buf, err := EncodeResponse(test.dnsmsg)
+		if err != nil && test.wantErr == nil {
+			t.Errorf("%s test, unexpected error: %v", test.name, err)
 		}
-		if result.Type != r.Type || result.Class != result.Type {
-			t.Errorf("body was decoded wrong:\nexpected%v\nget%v", r, result)
+		if !slices.Equal(buf, test.wantBuf) {
+			t.Errorf("%s test\nget:  %v\nwant: %v", test.name, buf, test.wantBuf)
 		}
 	}
+}
+
+func TestDecodeRequest(t *testing.T) {
+}
+
+func TestDecodeHeader(t *testing.T) {
+}
+
+func TestDecodeQuestion(t *testing.T) {
 }
