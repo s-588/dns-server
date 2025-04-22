@@ -36,7 +36,7 @@ func NewDB() (DB, error) {
 	}, nil
 }
 
-func (db DB) GetResourceRecord(name string) ([]*protocol.RR, error) {
+func (db DB) GetRRs(name string) ([]*protocol.RR, error) {
 	resourceRecords := make([]*protocol.RR, 0)
 
 	rrs, err := db.queries.GetResourceRecord(context.Background(), name)

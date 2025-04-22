@@ -5,13 +5,14 @@ import (
 	"log/slog"
 	"net"
 
+	"github.com/prionis/dns-server/database"
 	"github.com/prionis/dns-server/protocol"
 	"github.com/prionis/dns-server/sqlite"
 )
 
 type Server struct {
 	port string
-	db   sqlite.DB
+	db   database.DB
 }
 
 func NewServer(port string) (Server, error) {
@@ -69,7 +70,7 @@ func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr)
 
 	for _, question := range message.Questions {
 		slog.Info("searching for domain", "domain", question.Domain)
-		answers, err := s.db.GetResourceRecord(question.Domain)
+		answers, err := s.db.GetRRs(question.Domain)
 		if err != nil {
 			slog.Error("get RR from db", "err", err)
 			return
