@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log/slog"
 	"net"
 
@@ -11,22 +10,31 @@ import (
 )
 
 type Server struct {
-	port string
-	db   database.DB
+	port   string
+	logger Logger
+	db     database.DB
 }
 
-func NewServer(port string) (Server, error) {
+func NewServer(opts ...Option) (Server, error) {
 	s := Server{}
 
-	db, err := sqlite.NewDB()
+	defDB, err := sqlite.NewDB()
 	if err != nil {
 		return s, err
 	}
-	slog.Info("connection with database established")
+	conf := options{
+		port:   "53",
+		logger: slog.Default(),
+		db:     defDB,
+	}
+	for _, opt := range opts {
+		opt.apply(&conf)
+	}
 
 	s = Server{
-		port: port,
-		db:   db,
+		port:   conf.port,
+		db:     conf.db,
+		logger: conf.logger,
 	}
 	slog.Info("server created")
 	return s, nil
@@ -82,7 +90,6 @@ func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr)
 		message.Answers = append(message.Answers, answers...)
 	}
 
-	slog.Info("encoding response", "response", fmt.Sprintf("%x", message))
 	answer, err := protocol.EncodeResponse(message)
 	if err != nil {
 		slog.Error("encode response", "err", err)
