@@ -8,10 +8,18 @@ import (
 )
 
 func main() {
-	s, err := server.NewServer(server.SetPort("1053"), server.WithLogger(slog.Default()))
+	logger := slog.New(slog.NewJSONHandler(os.Stdin, nil))
+	config := []server.Option{
+		server.SetPort("1053"),
+		server.WithLogger(logger),
+	}
+	s, err := server.NewServer(config...)
 	if err != nil {
-		slog.Error("critical error", "err", err)
+		logger.Error("can't create new server", "config", config, "error", err)
 		os.Exit(1)
 	}
-	slog.Error("critical error", "err", s.Start())
+
+	if err := s.Start(); err != nil {
+		logger.Error("can't start server", "config", config, "error", err)
+	}
 }
