@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log/slog"
 )
 
 var (
@@ -100,8 +99,6 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 		AdditionalCount: uint16(len(message.Additionals)),
 	}
 
-	slog.Info("write header", "header", header)
-
 	header.AdditionalCount = 0
 	err := binary.Write(response, binary.BigEndian, &header)
 	if err != nil {
@@ -109,7 +106,6 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	}
 
 	for _, question := range message.Questions {
-		slog.Info("writing question", "q", *question)
 		err := WriteDomainName(question.Domain, response)
 		if err != nil {
 			return response.Bytes(), err
@@ -127,7 +123,6 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	}
 
 	for _, answer := range message.Answers {
-		slog.Info("writing answer", "a", *answer)
 		err := EncodeRR(response, answer)
 		if err != nil {
 			return response.Bytes(), err
@@ -135,7 +130,6 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	}
 
 	for _, authority := range message.Authorities {
-		slog.Info("writing authority", "a", *authority)
 		err := EncodeRR(response, authority)
 		if err != nil {
 			return response.Bytes(), err
@@ -149,12 +143,10 @@ func EncodeResponse(message DNSMessage) ([]byte, error) {
 	// 		return response.Bytes(), err
 	// 	}
 	// }
-	slog.Info("response is", "hex", fmt.Sprintf("%x", response.Bytes()), "byte", fmt.Sprintf("%v", response.Bytes()))
 	return response.Bytes(), nil
 }
 
 func EncodeRR(buffer *bytes.Buffer, rr *RR) error {
-	slog.Info("encoding record", "domain", rr.Domain, "string data", string(rr.Data), "byte data", fmt.Sprintf("%v", rr.Data))
 	err := WriteDomainName(rr.Domain, buffer)
 	if err != nil {
 		return fmt.Errorf("encode RR: %w", err)
