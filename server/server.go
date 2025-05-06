@@ -74,7 +74,7 @@ func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr)
 	for _, question := range message.Questions {
 		answers, err := s.db.GetRRs(question.Domain)
 		if err != nil {
-			slog.Error("get RR from db", "err", err)
+			s.logger.Error("get RR from db", "err", err)
 			return
 		}
 		message.Answers = append(message.Answers, answers...)
@@ -82,7 +82,7 @@ func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr)
 
 	answer, err := protocol.EncodeResponse(message)
 	if err != nil {
-		slog.Error("encode response", "err", err)
+		s.logger.Error("encode response", "err", err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (s Server) handleRequest(data []byte, conn *net.UDPConn, addr *net.UDPAddr)
 
 	_, err = conn.WriteToUDP(answer, addr)
 	if err != nil {
-		slog.Error("write response to conn", "err", err)
+		s.logger.Error("write response to conn", "err", err)
 		return
 	}
 }
