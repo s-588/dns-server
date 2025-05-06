@@ -15,6 +15,7 @@ import (
 	"github.com/prionis/dns-server/protocol"
 	"github.com/prionis/dns-server/server"
 	"github.com/prionis/dns-server/sqlite"
+	"github.com/prionis/dns-server/ui/tui"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,12 +84,12 @@ func DelRR(arg int64) {
 	}
 	printSuccess(fmt.Sprintf("record was deleted\n%s %s\nClass: %s\nType: %s\nTimeToLive: %d",
 		rr.Domain, net.IP(rr.Data).String(),
-		protocol.KeyByValue(protocol.Classes, rr.Class),
-		protocol.KeyByValue(protocol.Types, rr.Type), rr.TimeToLive))
+		protocol.MapKeyByValue(protocol.Classes, rr.Class),
+		protocol.MapKeyByValue(protocol.Types, rr.Type), rr.TimeToLive))
 }
 
 func StartServer() {
-	sock, err := NewUISocket()
+	sock, err := tui.NewUISocket()
 	if err != nil {
 		printError("can't create socket\n" + err.Error())
 		return
@@ -119,7 +120,7 @@ func StartServer() {
 }
 
 func StartTUI() {
-	p := tea.NewProgram(NewModel())
+	p := tea.NewProgram(tui.NewModel())
 	if _, err := p.Run(); err != nil {
 		printError("can't open TUI\n" + err.Error())
 	}
@@ -168,8 +169,8 @@ func PrintRRList() {
 	for _, rr := range rrs {
 		rows = append(rows, table.Row{
 			strconv.FormatInt(rr.ID, 10),
-			protocol.KeyByValue(protocol.Types, rr.RR.Type),
-			protocol.KeyByValue(protocol.Classes, rr.RR.Class),
+			protocol.MapKeyByValue(protocol.Types, rr.RR.Type),
+			protocol.MapKeyByValue(protocol.Classes, rr.RR.Class),
 			rr.RR.Domain,
 			net.IP(rr.RR.Data).String(),
 			strconv.FormatInt(int64(rr.RR.TimeToLive), 10),
