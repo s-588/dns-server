@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,6 +11,11 @@ import (
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case popupMsg:
+		m.msgPopup.msg = string(msg)
+		return m, tea.Batch(m.hidePopup(5*time.Second), listenForPopupMsg(m.msgChan))
+	case clearPopupMsg:
+		m.popupClear()
 	case logMsg:
 		// Append new log line
 		t, err := time.Parse(time.RFC3339, msg["time"].(string))
@@ -24,7 +28,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update viewport content and scroll to bottom
 		m.logTable.SetRows(append(m.logTable.Rows(), table.Row{t.Format(time.DateTime), level, message}))
 		m.logTable.UpdateViewport()
-		return m, waitForMsg(m.msg)
+		return m, waitForLogMsg(m.msg)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -141,7 +145,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f":
 
 		default:
-			fmt.Println("uknown key")
+			m.popupError("uknown key " + msg.String())
+			return m, listenForPopupMsg(m.msgPopup.msgChan)
 		}
 	default:
 		if m.selectedTab == 0 {

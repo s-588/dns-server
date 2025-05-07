@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func waitForMsg(msgs chan map[string]any) tea.Cmd {
+func waitForLogMsg(msgs chan map[string]any) tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-msgs
 		if !ok {

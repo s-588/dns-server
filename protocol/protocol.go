@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-func KeyByValue(m map[string]uint16, value uint16) string {
+func MapKeyByValue(m map[string]uint16, value uint16) string {
 	for k, v := range m {
 		if v == value {
 			return k
