@@ -36,7 +36,7 @@ type model struct {
 	logTable table.Model
 	rrTable  table.Model
 
-	errorPopup
+	msgPopup
 }
 
 type tab struct {
@@ -123,6 +123,10 @@ func NewModel() model {
 
 		rrTable:  rrTable,
 		logTable: logTable,
+
+		msgPopup: msgPopup{
+			msgChan: make(chan string),
+		},
 	}
 }
 
@@ -133,5 +137,6 @@ func (m model) Close() {
 
 func (m model) Init() tea.Cmd {
 	go m.readSocket()
-	return waitForMsg(m.msg)
+	return tea.Batch(waitForLogMsg(m.msg),
+		listenForPopupMsg(m.msgPopup.msgChan))
 }

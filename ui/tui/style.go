@@ -51,10 +51,15 @@ var (
 
 	baseStyle = lipgloss.NewStyle().Padding(1, 2)
 
-	recordStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFD700")).
-			Bold(true)
+	errorBoarderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(redColor)
 
-	recordDetailStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF"))
+	successBoarderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(greenColor)
+
+	infoBoarderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(blueColor)
 )

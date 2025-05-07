@@ -70,9 +70,36 @@ func (m model) rawView() string {
 	}
 
 	s.WriteString("\n\n")
+	s.WriteString(renderPopup(m))
 
 	// Footer with border
 	s.WriteString(footerStyle.Render("Press q to quit. Use ↑/↓ to navigate."))
 
 	return s.String()
+}
+
+func renderPopup(m model) string {
+	if m.msgPopup.show {
+		s := strings.Builder{}
+
+		switch m.level {
+		case "INFO":
+			s.WriteString("INFO: ")
+			s.WriteString(m.msgPopup.msg)
+			return infoBoarderStyle.Render(s.String())
+
+		case "ERROR":
+			s.WriteString("ERROR: ")
+			s.WriteString(m.msgPopup.msg)
+			return errorBoarderStyle.Render(s.String())
+
+		case "SUCCESS":
+			s.WriteString("SUCCESS: ")
+			s.WriteString(m.msgPopup.msg)
+			return successBoarderStyle.Render(s.String())
+
+		}
+	}
+
+	return ""
 }
