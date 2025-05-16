@@ -1,13 +1,13 @@
 CREATE TABLE resrecords (
-	ID INTEGER PRIMARY KEY,
-	domain TEXT NOT NULL,
-	data TEXT NOT NULL,
-	typeID INTEGER NOT NULL,
-	classID INTEGER NOT NULL,
-	ttl INTEGER DEFAULT 0,
-	FOREIGN KEY (typeID) REFERENCES types(id),
-	FOREIGN KEY (classID) REFERENCES classes(id),
-	UNIQUE(domain, data, typeID, classID) 
+    ID INTEGER PRIMARY KEY,
+    domain TEXT NOT NULL,
+    data TEXT NOT NULL,
+    typeID INTEGER NOT NULL,
+    classID INTEGER NOT NULL,
+    ttl INTEGER DEFAULT 0,
+    FOREIGN KEY (typeID) REFERENCES types(id),
+    FOREIGN KEY (classID) REFERENCES classes(id),
+    UNIQUE(domain, data, typeID, classID) 
 );
 
 CREATE TABLE resrecords_types (
@@ -15,7 +15,7 @@ CREATE TABLE resrecords_types (
     resrecordID INTEGER NOT NULL,
     PRIMARY KEY (typeID, resrecordID),
     FOREIGN KEY (typeID) REFERENCES types(id),
-    FOREIGN KEY (resrecordID) REFERENCES resrecords(id)
+    FOREIGN KEY (resrecordID) REFERENCES resrecords(id) ON DELETE CASCADE
 );
 
 CREATE TABLE resrecords_classes (
@@ -23,16 +23,15 @@ CREATE TABLE resrecords_classes (
     resrecordID INTEGER NOT NULL,
     PRIMARY KEY (classID, resrecordID),
     FOREIGN KEY (classID) REFERENCES classes(id),
-    FOREIGN KEY (resrecordID) REFERENCES resrecords(id)
+    FOREIGN KEY (resrecordID) REFERENCES resrecords(id) ON DELETE CASCADE
 );
 
 CREATE TABLE types(
-	ID INTEGER PRIMARY KEY,
-	type text NOT NULL
+    ID INTEGER PRIMARY KEY,
+    type TEXT NOT NULL
 );
 
 CREATE TABLE classes(
-	ID INTEGER PRIMARY KEY,
-	class text NOT NULL
+    ID INTEGER PRIMARY KEY,
+    class TEXT NOT NULL
 );
-
