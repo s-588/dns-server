@@ -83,9 +83,9 @@ func DelRR(arg int64) {
 		return
 	}
 	printSuccess(fmt.Sprintf("record was deleted\n%s %s\nClass: %s\nType: %s\nTimeToLive: %d",
-		rr.Domain, net.IP(rr.Data).String(),
-		protocol.MapKeyByValue(protocol.Classes, rr.Class),
-		protocol.MapKeyByValue(protocol.Types, rr.Type), rr.TimeToLive))
+		rr.RR.Domain, net.IP(rr.RR.Data).String(),
+		protocol.MapKeyByValue(protocol.Classes, rr.RR.Class),
+		protocol.MapKeyByValue(protocol.Types, rr.RR.Type), rr.RR.TimeToLive))
 }
 
 func StartServer() {
@@ -120,7 +120,7 @@ func StartServer() {
 }
 
 func StartTUI() {
-	p := tea.NewProgram(tui.NewModel())
+	p := tea.NewProgram(tui.NewModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		printError("can't open TUI\n" + err.Error())
 	}

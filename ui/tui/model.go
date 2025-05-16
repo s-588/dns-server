@@ -13,6 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/prionis/dns-server/protocol"
 	"github.com/prionis/dns-server/sqlite"
+	crud "github.com/prionis/dns-server/ui/tui/CRUD"
+	"github.com/prionis/dns-server/ui/tui/popup"
 	"golang.org/x/term"
 )
 
@@ -20,14 +22,13 @@ const (
 	focusTabs = iota
 	focusButtons
 	focusTable
+	focusAddPage
+	focusDeletePage
 )
 
 type model struct {
 	width  int
 	height int
-
-	sockConn net.Conn
-	msg      chan map[string]any
 
 	focusLayer  int
 	tabs        []tab
@@ -36,7 +37,15 @@ type model struct {
 	logTable table.Model
 	rrTable  table.Model
 
-	msgPopup
+	popup popup.PopupModel
+
+	deletePage crud.DeleteModel
+	addPage    crud.AddModel
+
+	sockConn   net.Conn
+	logMsgChan chan map[string]any
+
+	db *sqlite.DB
 }
 
 type tab struct {
@@ -55,6 +64,7 @@ func NewModel() model {
 	if err != nil {
 		slog.Error("can't get term size")
 	}
+	w -= 7
 
 	db, err := sqlite.NewDB()
 	if err != nil {
@@ -66,7 +76,7 @@ func NewModel() model {
 		slog.Error("can't get records from database", "error", err)
 	}
 
-	cols := []table.Column{{"ID", 4}, {"domain", 10}, {"data", 10}, {"type", 4}, {"class", 5}, {"TimeToLive", 8}}
+	cols := []table.Column{{"ID", 4}, {"domain", max(20, w/6)}, {"data", max(20, w/6)}, {"type", 6}, {"class", 8}, {"TimeToLive", 12}}
 	rows := make([]table.Row, 0, len(dbRRs))
 	for _, rr := range dbRRs {
 		rows = append(rows, table.Row{
@@ -106,8 +116,8 @@ func NewModel() model {
 	logTable := table.New(table.WithColumns(cols), table.WithRows(rows), table.WithHeight(10))
 
 	return model{
-		width:  w / 3,
-		height: h / 2,
+		width:  w,
+		height: h,
 		tabs: []tab{
 			{
 				name:    "Logs",
@@ -115,28 +125,28 @@ func NewModel() model {
 			},
 			{
 				name:    "Records",
-				buttons: []string{"View", "Add", "Filter", "Sort"},
+				buttons: []string{"View", "Add", "Delete", "Filter", "Sort"},
 			},
 		},
-		msg:      make(chan map[string]any),
-		sockConn: conn,
+		logMsgChan: make(chan map[string]any, 1),
+		sockConn:   conn,
 
 		rrTable:  rrTable,
 		logTable: logTable,
 
-		msgPopup: msgPopup{
-			msgChan: make(chan string),
-		},
+		popup:      popup.NewPopupModel(),
+		deletePage: crud.NewDeleteModel(nil, &db),
+		addPage:    crud.NewAddModel(&db),
+
+		db: &db,
 	}
 }
 
 func (m model) Close() {
-	close(m.msg)
 	m.sockConn.Close()
 }
 
 func (m model) Init() tea.Cmd {
 	go m.readSocket()
-	return tea.Batch(waitForLogMsg(m.msg),
-		listenForPopupMsg(m.msgPopup.msgChan))
+	return tea.Batch(waitForLogMsg(m.logMsgChan), popup.ListenForPopupMsg(m.popup.MsgChan))
 }
