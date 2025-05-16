@@ -51,7 +51,7 @@ func (db DB) AddRR(t, class string, domain string, ip net.IP, ttl int64) error {
 	return nil
 }
 
-func (db DB) DelRR(id int64) (*protocol.RR, error) {
+func (db DB) DelRR(id int64) (*database.DBRR, error) {
 	rr, err := db.queries.DeleteResourceRecord(context.Background(), id)
 	if err != nil {
 		return nil, err
@@ -60,13 +60,16 @@ func (db DB) DelRR(id int64) (*protocol.RR, error) {
 	rrType, err := db.queries.GetTypeName(context.Background(), rr.Typeid)
 	rrClass, err := db.queries.GetClassName(context.Background(), rr.Classid)
 
-	return &protocol.RR{
-		Domain:     rr.Domain,
-		Type:       protocol.Types[rrType],
-		TimeToLive: uint32(rr.Ttl.Int64),
-		Class:      protocol.Classes[rrClass],
-		DataLen:    4,
-		Data:       net.ParseIP(rr.Data),
+	return &database.DBRR{
+		rr.ID,
+		protocol.RR{
+			Domain:     rr.Domain,
+			Type:       protocol.Types[rrType],
+			TimeToLive: uint32(rr.Ttl.Int64),
+			Class:      protocol.Classes[rrClass],
+			DataLen:    4,
+			Data:       net.ParseIP(rr.Data),
+		},
 	}, nil
 }
 
