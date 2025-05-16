@@ -5,11 +5,12 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/prionis/dns-server/ui/tui/style"
 )
 
 func (m model) View() string {
 	raw := m.rawView() // your existing UI rendering logic
-	return baseBorderStyle.Render(raw)
+	return style.BaseBorderStyle.Render(raw)
 }
 
 func (m model) rawView() string {
@@ -24,7 +25,7 @@ func (m model) rawView() string {
 	}
 
 	// Header with border
-	s.WriteString(headerStyle.Render("DNS Server Dashboard"))
+	s.WriteString(style.HeaderStyle.Render("DNS Server Dashboard"))
 	s.WriteString("\n\n")
 
 	// Tabs row
@@ -32,74 +33,58 @@ func (m model) rawView() string {
 	for i, tab := range m.tabs {
 		if m.selectedTab == i {
 			if m.focusLayer == focusTabs {
-				tabs[i] = selectedButtonStyle.Render(tab.name)
+				tabs[i] = style.SelectedButtonStyle.Render(tab.name)
 			} else {
-				tabs[i] = secondarySelectedButtonStyle.Render(tab.name)
+				tabs[i] = style.SecondarySelectedButtonStyle.Render(tab.name)
 			}
 		} else {
-			tabs[i] = buttonStyle.Render(tab.name)
+			tabs[i] = style.ButtonStyle.Render(tab.name)
 		}
 	}
 	buttonsAlignCenter := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
 	s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...)))
 	s.WriteString("\n\n")
 
-	// Content area with border
-	buttons := make([]string, len(m.tabs[m.selectedTab].buttons))
-	for i, btn := range m.tabs[m.selectedTab].buttons {
-		if m.tabs[m.selectedTab].cursor == i {
-			if m.focusLayer == focusButtons {
-				buttons[i] = selectedButtonStyle.Render(btn)
+	// Content area
+	switch m.focusLayer {
+	case focusDeletePage:
+		s.WriteString(m.deletePage.View())
+
+	case focusAddPage:
+		s.WriteString(m.addPage.View())
+
+	default:
+		// Buttons row
+		buttons := make([]string, len(m.tabs[m.selectedTab].buttons))
+		for i, btn := range m.tabs[m.selectedTab].buttons {
+			if m.tabs[m.selectedTab].cursor == i {
+				if m.focusLayer == focusButtons {
+					buttons[i] = style.SelectedButtonStyle.Render(btn)
+				} else {
+					buttons[i] = style.SecondarySelectedButtonStyle.Render(btn)
+				}
 			} else {
-				buttons[i] = secondarySelectedButtonStyle.Render(btn)
+				buttons[i] = style.ButtonStyle.Render(btn)
 			}
+		}
+		buttonsAlignCenter = lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
+		s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, buttons...)))
+		s.WriteString("\n\n")
+
+		// Table
+		if table.Focused() {
+			s.WriteString(style.SelectedBoarderStyle.Render(table.View()))
 		} else {
-			buttons[i] = buttonStyle.Render(btn)
+			s.WriteString(style.UnselectedBoarderStyle.Render(table.View()))
 		}
 	}
 
-	// Second button row
-	buttonsAlignCenter = lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
-	s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, buttons...)))
 	s.WriteString("\n\n")
-
-	if table.Focused() {
-		s.WriteString(selectedBoarderStyle.Render(table.View()))
-	} else {
-		s.WriteString(unselectedBoarderStyle.Render(table.View()))
-	}
-
-	s.WriteString("\n\n")
-	s.WriteString(renderPopup(m))
+	s.WriteString(m.popup.View())
 
 	// Footer with border
-	s.WriteString(footerStyle.Render("Press q to quit. Use ↑/↓ to navigate."))
+	s.WriteString("\n")
+	s.WriteString(style.FooterStyle.Render("Press q to quit. Use ↑/↓ to navigate."))
 
 	return s.String()
-}
-
-func renderPopup(m model) string {
-	if m.msgPopup.show {
-		s := strings.Builder{}
-
-		switch m.level {
-		case "INFO":
-			s.WriteString("INFO: ")
-			s.WriteString(m.msgPopup.msg)
-			return infoBoarderStyle.Render(s.String())
-
-		case "ERROR":
-			s.WriteString("ERROR: ")
-			s.WriteString(m.msgPopup.msg)
-			return errorBoarderStyle.Render(s.String())
-
-		case "SUCCESS":
-			s.WriteString("SUCCESS: ")
-			s.WriteString(m.msgPopup.msg)
-			return successBoarderStyle.Render(s.String())
-
-		}
-	}
-
-	return ""
 }

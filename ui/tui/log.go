@@ -23,11 +23,11 @@ func (m model) readSocket() {
 	for {
 		n, err := m.sockConn.Read(buf)
 		if err != nil {
-			close(m.msg)
+			close(m.logMsgChan)
 			return
 		}
 		err = json.Unmarshal(buf[:n], &log)
-		m.msg <- log
+		m.logMsgChan <- log
 	}
 }
 
