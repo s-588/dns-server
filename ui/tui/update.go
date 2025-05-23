@@ -16,6 +16,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case crud.AddSuccessMsg:
+		if m.rrTable.Focused() {
+			m.focusLayer = focusTable
+		} else {
+			m.focusLayer = focusButtons
+		}
+	case crud.AddCancelMsg:
+		if m.rrTable.Focused() {
+			m.focusLayer = focusTable
+		} else {
+			m.focusLayer = focusButtons
+		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -83,6 +95,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "q", "esc":
 			switch m.focusLayer {
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
+
 			case focusDeletePage:
 				model, cmd := m.deletePage.Update(msg)
 				m.deletePage = model.(crud.DeleteModel)
@@ -102,6 +119,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The "up" and "k" keys move the cursor up
 		case "up", "k":
 			switch m.focusLayer {
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
 			case focusTable:
 				m, cmd = m.updateTable(msg)
 				cmds = append(cmds, cmd)
@@ -114,6 +135,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
 			switch m.focusLayer {
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
 			case focusTable:
 				if m.rrTable.Focused() || m.logTable.Focused() {
 					m, cmd = m.updateTable(msg)
@@ -135,6 +160,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "left", "l":
 			switch m.focusLayer {
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
 			case focusDeletePage:
 				model, cmd := m.deletePage.Update(msg)
 				m.deletePage = model.(crud.DeleteModel)
@@ -160,6 +189,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "right", "h":
 			switch m.focusLayer {
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
 			case focusDeletePage:
 				model, cmd := m.deletePage.Update(msg)
 				m.deletePage = model.(crud.DeleteModel)
@@ -187,6 +220,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the selected state for the item that the cursor is pointing at.
 		case "enter", " ":
 			switch m.focusLayer {
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
 			case focusDeletePage:
 				model, cmd := m.deletePage.Update(msg)
 				m.deletePage = model.(crud.DeleteModel)
@@ -236,6 +273,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Filter key
 		case "f":
 
+			case focusAddPage:
+				model, cmd := m.addPage.Update(msg)
+				m.addPage = model.(crud.AddModel)
+				cmds = append(cmds, cmd)
+			}
 		}
 	default:
 		if m.selectedTab == 0 {
