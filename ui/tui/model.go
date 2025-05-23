@@ -24,6 +24,9 @@ const (
 	focusTable
 	focusAddPage
 	focusDeletePage
+
+	minWidth  = 52
+	minHeight = 22
 )
 
 type model struct {
@@ -54,29 +57,99 @@ type tab struct {
 	cursor  int
 }
 
-func NewModel() model {
-	conn, err := MakeSockConn()
-	if err != nil {
-		slog.Error("can't connect to socket", "error", err)
-	}
-
+func NewModel() (model, error) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		slog.Error("can't get term size")
 	}
-	w -= 7
+	if w < minWidth || h < minHeight {
+		return model{},
+			fmt.Errorf("Minimum size of the screen is %dx%d. Current is %dx%d",
+				minWidth, minHeight, w, h)
+	}
+
+	conn, err := MakeSockConn()
+	if err != nil {
+		slog.Error("can't connect to socket", "error", err)
+	}
 
 	db, err := sqlite.NewDB()
 	if err != nil {
 		slog.Error("can't connect to database", "error", err)
 	}
 
+	rrTable, logTable := rrTable(&db, w, h), logTable(w, h)
+	return model{
+		width:  w,
+		height: h,
+		tabs: []tab{
+			{
+				name: "Logs",
+				buttons: []string{
+					fmt.Sprintf("View%c ", '\uebb7'),
+					fmt.Sprintf("Filter%c ", '\ueaf1'),
+					fmt.Sprintf("Sort%c ", '\ueaf1'),
+					fmt.Sprintf("Export to Word%c ", '\ue6a5'),
+					fmt.Sprintf("Export to Excel%c ", '\uf1c3'),
+				},
+			},
+			{
+				name: "Records",
+				buttons: []string{
+					fmt.Sprintf("View%c ", '\uebb7'),
+					fmt.Sprintf("Add%c ", '\uea60'),
+					fmt.Sprintf("Delete%c ", '\uf00d'),
+					fmt.Sprintf("Update%c ", '\uea73'),
+					fmt.Sprintf("Filter%c ", '\ueaf1'),
+					fmt.Sprintf("Sort%c ", '\ueaf1'),
+					fmt.Sprintf("Export to Word%c ", '\ue6a5'),
+					fmt.Sprintf("Export to Excel%c ", '\uf1c3'),
+				},
+			},
+		},
+		logMsgChan: make(chan map[string]any, 1),
+		sockConn:   conn,
+
+		rrTable:  rrTable,
+		logTable: logTable,
+
+		popup:      popup.NewPopupModel(),
+		db: &db,
+	}, nil
+}
+
+func rrTable(db *sqlite.DB, w, h int) table.Model {
 	dbRRs, err := db.GetAllRRs()
 	if err != nil {
 		slog.Error("can't get records from database", "error", err)
 	}
 
-	cols := []table.Column{{"ID", 4}, {"domain", max(20, w/6)}, {"data", max(20, w/6)}, {"type", 6}, {"class", 8}, {"TimeToLive", 12}}
+	cols := []table.Column{
+		{
+			Title: "ID",
+			Width: max(4, w/10-5),
+		},
+		{
+			Title: "Domain",
+			Width: max(8, w/10*3-5),
+		},
+		{
+			Title: "Data",
+			Width: max(10, w/10*3-5),
+		},
+		{
+			Title: "Type",
+			Width: max(5, w/10-5),
+		},
+		{
+			Title: "Class",
+			Width: max(2, w/10-5),
+		},
+		{
+			Title: "TimeToLive",
+			Width: max(6, w/10-5),
+		},
+	}
 	rows := make([]table.Row, 0, len(dbRRs))
 	for _, rr := range dbRRs {
 		rows = append(rows, table.Row{
@@ -88,9 +161,15 @@ func NewModel() model {
 			strconv.FormatInt(int64(rr.RR.TimeToLive), 10),
 		})
 	}
-	rrTable := table.New(table.WithColumns(cols), table.WithRows(rows), table.WithHeight(10))
+	return table.New(
+		table.WithColumns(cols),
+		table.WithRows(rows),
+		table.WithHeight(max(3, h-20)),
+		table.WithWidth(w-8))
+}
 
-	rows = make([]table.Row, 0)
+func logTable(w, h int) table.Model {
+	rows := make([]table.Row, 0)
 	file, err := os.Open("DNSServer.log")
 	if err != nil {
 	}
@@ -112,34 +191,26 @@ func NewModel() model {
 			log["msg"].(string),
 		})
 	}
-	cols = []table.Column{{"time", 14}, {"level", 5}, {"message", 20}}
-	logTable := table.New(table.WithColumns(cols), table.WithRows(rows), table.WithHeight(10))
-
-	return model{
-		width:  w,
-		height: h,
-		tabs: []tab{
-			{
-				name:    "Logs",
-				buttons: []string{"View", "Filter", "Sort"},
-			},
-			{
-				name:    "Records",
-				buttons: []string{"View", "Add", "Delete", "Filter", "Sort"},
-			},
+	cols := []table.Column{
+		{
+			Title: "Time",
+			Width: max(8, w/5-5),
 		},
-		logMsgChan: make(chan map[string]any, 1),
-		sockConn:   conn,
-
-		rrTable:  rrTable,
-		logTable: logTable,
-
-		popup:      popup.NewPopupModel(),
-		deletePage: crud.NewDeleteModel(nil, &db),
-		addPage:    crud.NewAddModel(&db),
-
-		db: &db,
+		{
+			Title: "Level",
+			Width: max(5, w/5-5),
+		},
+		{
+			Title: "Message",
+			Width: max(8, (w/5)*3-5),
+		},
 	}
+	return table.New(
+		table.WithColumns(cols),
+		table.WithRows(rows),
+		table.WithHeight(max(3, h-20)),
+		table.WithWidth(w-8),
+	)
 }
 
 func (m model) Close() {

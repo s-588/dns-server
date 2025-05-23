@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -9,8 +10,9 @@ import (
 )
 
 func (m model) View() string {
-	raw := m.rawView() // your existing UI rendering logic
-	return style.BaseBorderStyle.Render(raw)
+	raw := m.rawView()
+	// Ensure the outer border respects the full terminal height
+	return style.BaseBorderStyle.Height(m.height - 2).Width(m.width - 2).Render(raw)
 }
 
 func (m model) rawView() string {
@@ -54,6 +56,23 @@ func (m model) rawView() string {
 		s.WriteString(m.addPage.View())
 
 	default:
+		// Tabs row
+		tabs := make([]string, len(m.tabs))
+		for i, tab := range m.tabs {
+			if m.selectedTab == i {
+				if m.focusLayer == focusTabs {
+					tabs[i] = style.SelectedButtonStyle.Render(tab.name)
+				} else {
+					tabs[i] = style.SecondarySelectedButtonStyle.Render(tab.name)
+				}
+			} else {
+				tabs[i] = style.ButtonStyle.Render(tab.name)
+			}
+		}
+		buttonsAlignCenter := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
+		s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...)))
+		s.WriteString("\n\n")
+
 		// Buttons row
 		buttons := make([]string, len(m.tabs[m.selectedTab].buttons))
 		for i, btn := range m.tabs[m.selectedTab].buttons {
@@ -82,9 +101,18 @@ func (m model) rawView() string {
 	s.WriteString("\n\n")
 	s.WriteString(m.popup.View())
 
-	// Footer with border
-	s.WriteString("\n")
-	s.WriteString(style.FooterStyle.Render("Press q to quit. Use ↑/↓ to navigate."))
+	help := fmt.Sprintf(
+		"Need help? Press ? for full instructions. Press Esc to exit. Use %c /%c  and %c /%c  to navigate. Press Enter to confirm your choice.",
+		'\uea9b', '\uea9c', '\ueaa1', '\uea9a',
+	)
+
+	switch m.focusLayer {
+	case focusTable:
+		if m.selectedTab == 1 {
+			help += " Press D to delete record. Press A to add record. Press / to find record. Press F to filter."
+		}
+	}
+	s.WriteString(style.FooterStyle.Render(help))
 
 	return s.String()
 }

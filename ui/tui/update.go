@@ -16,6 +16,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		// Update table dimensions
+		m.rrTable = rrTable(m.db, msg.Width, msg.Height)
+		m.logTable = logTable(msg.Width, msg.Height)
+		// Ensure the cursor stays within bounds
+		if m.rrTable.Cursor() >= len(m.rrTable.Rows()) && len(m.rrTable.Rows()) > 0 {
+			m.rrTable.SetCursor(len(m.rrTable.Rows()) - 1)
+		}
+		if m.logTable.Cursor() >= len(m.logTable.Rows()) && len(m.logTable.Rows()) > 0 {
+			m.logTable.SetCursor(len(m.logTable.Rows()) - 1)
+		}
+
 	case popup.PopupMsg:
 		updatedModel, cmd := m.popup.Update(msg)
 		m.popup = updatedModel.(popup.PopupModel)
