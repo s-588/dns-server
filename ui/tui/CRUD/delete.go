@@ -17,6 +17,7 @@ import (
 )
 
 type DeleteModel struct {
+	width, height int
 	// Message with data of Record user wan't to delete.
 	Record table.Row
 
@@ -27,11 +28,13 @@ type DeleteModel struct {
 	db *sqlite.DB
 }
 
-func NewDeleteModel(record table.Row, db *sqlite.DB) DeleteModel {
+func NewDeleteModel(record table.Row, db *sqlite.DB, w, h int) DeleteModel {
 	return DeleteModel{
 		Record:  record,
 		buttons: []string{"Yes", "No"},
 		db:      db,
+		width:   w,
+		height:  h,
 	}
 }
 
@@ -53,7 +56,6 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter", " ":
 			if d.cursor == 0 { // Button "Yes" is pressed
-				fmt.Println("cursor is 0")
 				id, err := parseRecordID(d.Record)
 				if err != nil {
 					return d, func() tea.Msg {
@@ -115,34 +117,27 @@ func parseRecordID(r table.Row) (int64, error) {
 	return strconv.ParseInt(id, 10, 64)
 }
 
-func (dm DeleteModel) View() string {
+func (d DeleteModel) View() string {
 	s := strings.Builder{}
 	s.WriteString(style.HeaderStyle.Render("Confirm Deletion"))
 	s.WriteString("\n\n")
-
-	// Display record details
 	recordDetails := fmt.Sprintf(
 		"ID: %s\nDomain: %s\nData: %s\nType: %s\nClass: %s\nTTL: %s",
-		dm.Record[0], dm.Record[1], dm.Record[2], dm.Record[3], dm.Record[4], dm.Record[5],
+		d.Record[0], d.Record[1], d.Record[2], d.Record[3], d.Record[4], d.Record[5],
 	)
 	s.WriteString(style.BaseStyle.Render(recordDetails))
 	s.WriteString("\n\n")
-
-	// Render Yes/No buttons
-	styledButtons := make([]string, len(dm.buttons))
-	for i, btn := range dm.buttons {
-		if dm.cursor == i {
+	styledButtons := make([]string, len(d.buttons))
+	for i, btn := range d.buttons {
+		if d.cursor == i {
 			styledButtons[i] = style.SelectedButtonStyle.Render(btn)
 		} else {
 			styledButtons[i] = style.ButtonStyle.Render(btn)
 		}
 	}
-	buttonsAlignCenter := lipgloss.NewStyle().Width(30).Align(lipgloss.Center)
+	buttonsAlignCenter := lipgloss.NewStyle().Width(d.width - 8).Height(d.height - 36).Align(lipgloss.Center)
 	s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, styledButtons...)))
-	s.WriteString("\n\n")
-
-	s.WriteString(style.FooterStyle.Render("Press Enter to confirm, Esc to cancel"))
-	return style.BaseBorderStyle.Render(s.String())
+	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
 type DeleteMsg struct {
