@@ -114,6 +114,7 @@ func NewModel() (model, error) {
 		logTable: logTable,
 
 		popup:      popup.NewPopupModel(),
+		addPage:    crud.NewAddModel(&db, w, h),
 		db: &db,
 	}, nil
 }
