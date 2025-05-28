@@ -16,6 +16,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case crud.SortMsg:
+		if m.selectedTab == 0 {
+			m.logTable.SetRows(msg.Rows)
+			m.logTable.UpdateViewport()
+			m.focusLayer = focusTable
+			m.logTable.Focus()
+		} else {
+			m.rrTable.SetRows(msg.Rows)
+			m.rrTable.UpdateViewport()
+			m.focusLayer = focusTable
+			m.rrTable.Focus()
+		}
+
+	case crud.SortCancelMsg:
+		m.focusLayer = focusButtons
+
+	case crud.FilterMsg:
+		if m.selectedTab == 0 {
+			m.logTable.SetRows(msg.Rows)
+			m.logTable.UpdateViewport()
+			m.focusLayer = focusTable
+			m.logTable.Focus()
+		} else {
+			m.rrTable.SetRows(msg.Rows)
+			m.rrTable.UpdateViewport()
+			m.focusLayer = focusTable
+			m.rrTable.Focus()
+		}
 	case crud.AddSuccessMsg:
 		if m.rrTable.Focused() {
 			m.focusLayer = focusTable
@@ -95,6 +123,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "ctrl+c", "q", "esc":
 			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+
+			case focusSortPage:
+				model, cmd := m.sortPage.Update(msg)
+				m.sortPage = model.(crud.SortModel)
+				cmds = append(cmds, cmd)
+
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
+
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)
 				m.addPage = model.(crud.AddModel)
@@ -105,20 +148,32 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.deletePage = model.(crud.DeleteModel)
 				cmds = append(cmds, cmd)
 				m.focusLayer = focusButtons
-				return m, tea.Batch(cmds...)
+
 			case focusTable:
 				if m.getTable().Focused() {
 					m.focusLayer--
 					m.getTable().Blur()
-					return m, nil
 				}
+			default:
+				m.Close()
+				cmds = append(cmds, tea.Quit)
 			}
-			m.Close()
-			cmds = append(cmds, tea.Quit)
 
 		// The "up" and "k" keys move the cursor up
 		case "up", "k":
 			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+			case focusSortPage:
+				model, cmd := m.sortPage.Update(msg)
+				m.sortPage = model.(crud.SortModel)
+				cmds = append(cmds, cmd)
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)
 				m.addPage = model.(crud.AddModel)
@@ -135,6 +190,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The "down" and "j" keys move the cursor down
 		case "down", "j":
 			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+			case focusSortPage:
+				model, cmd := m.sortPage.Update(msg)
+				m.sortPage = model.(crud.SortModel)
+				cmds = append(cmds, cmd)
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)
 				m.addPage = model.(crud.AddModel)
@@ -160,6 +227,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "left", "l":
 			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+			case focusSortPage:
+				model, cmd := m.sortPage.Update(msg)
+				m.sortPage = model.(crud.SortModel)
+				cmds = append(cmds, cmd)
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)
 				m.addPage = model.(crud.AddModel)
@@ -189,6 +268,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "right", "h":
 			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+			case focusSortPage:
+				model, cmd := m.sortPage.Update(msg)
+				m.sortPage = model.(crud.SortModel)
+				cmds = append(cmds, cmd)
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)
 				m.addPage = model.(crud.AddModel)
@@ -220,6 +311,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the selected state for the item that the cursor is pointing at.
 		case "enter", " ":
 			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+			case focusSortPage:
+				model, cmd := m.sortPage.Update(msg)
+				m.sortPage = model.(crud.SortModel)
+				cmds = append(cmds, cmd)
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)
 				m.addPage = model.(crud.AddModel)
@@ -237,7 +340,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case 0: // view button
 						m.logTable.Focus()
 					case 1: // filter button
+						m.filterPage = crud.NewFilterModel(m.db, nil, &m.logTable, m.width, m.height)
+						m.focusLayer = focusFilterPage
 					case 2: // sort button
+						m.sortPage = crud.NewSortModel(nil, &m.logTable, m.width, m.height, true)
+						m.focusLayer = focusSortPage
 					}
 				case 1: // records page
 					switch m.tabs[1].cursor {
@@ -248,8 +355,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case 2: // delete button
 						m.focusLayer = focusDeletePage
 						m.deletePage.Record = m.rrTable.SelectedRow()
-					case 3: // filter button
-					case 4: // sort button
+					case 3: // update button
+						m.updatePage = crud.NewUpdateModel(m.db, m.rrTable.SelectedRow(), m.width, m.height)
+						m.focusLayer = focusUpdatePage
+					case 4: // filter button
+						m.filterPage = crud.NewFilterModel(m.db, &m.rrTable, nil, m.width, m.height)
+						m.focusLayer = focusFilterPage
+					case 5: // sort button
+						m.sortPage = crud.NewSortModel(&m.rrTable, nil, m.width, m.height, false)
+						m.focusLayer = focusSortPage
 					}
 				}
 			case focusTable:
@@ -272,6 +386,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Filter key
 		case "f":
+
+		default:
+			switch m.focusLayer {
+			case focusUpdatePage:
+				model, cmd := m.updatePage.Update(msg)
+				m.updatePage = model.(crud.UpdateModel)
+				cmds = append(cmds, cmd)
+			case focusFilterPage:
+				model, cmd := m.filterPage.Update(msg)
+				m.filterPage = model.(crud.FilterModel)
+				cmds = append(cmds, cmd)
 
 			case focusAddPage:
 				model, cmd := m.addPage.Update(msg)

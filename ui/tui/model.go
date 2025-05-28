@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/prionis/dns-server/protocol"
 	"github.com/prionis/dns-server/sqlite"
 	crud "github.com/prionis/dns-server/ui/tui/CRUD"
+	"github.com/prionis/dns-server/ui/tui/export"
 	"github.com/prionis/dns-server/ui/tui/popup"
 	"golang.org/x/term"
 )
@@ -24,6 +26,9 @@ const (
 	focusTable
 	focusAddPage
 	focusDeletePage
+	focusUpdatePage
+	focusFilterPage
+	focusSortPage
 
 	minWidth  = 52
 	minHeight = 22
@@ -44,6 +49,10 @@ type model struct {
 
 	deletePage crud.DeleteModel
 	addPage    crud.AddModel
+	updatePage crud.UpdateModel
+
+	filterPage crud.FilterModel
+	sortPage   crud.SortModel
 
 	sockConn   net.Conn
 	logMsgChan chan map[string]any
@@ -79,6 +88,11 @@ func NewModel() (model, error) {
 	}
 
 	rrTable, logTable := rrTable(&db, w, h), logTable(w, h)
+	// path, err := export.NewExcelFile(logTable.Rows(), true)
+	// fmt.Println(path, err)
+	t := time.UnixMicro(time.Now().UnixMicro() - int64(time.Hour*24))
+	path, err := export.NewWordFile(logTable.Rows(), rrTable.Rows(), t, time.Now())
+	fmt.Println(path, err)
 	return model{
 		width:  w,
 		height: h,
@@ -116,6 +130,8 @@ func NewModel() (model, error) {
 		popup:      popup.NewPopupModel(),
 		deletePage: crud.NewDeleteModel(nil, &db, w, h),
 		addPage:    crud.NewAddModel(&db, w, h),
+		filterPage: crud.NewFilterModel(&db, nil, nil, w, h),
+
 		db: &db,
 	}, nil
 }

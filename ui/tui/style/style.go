@@ -27,8 +27,7 @@ var (
 			Bold(true).
 			Background(PurpleColor).
 			Padding(0, 2).
-			Align(lipgloss.Center).
-			Width(50)
+			Align(lipgloss.Center)
 
 	ButtonStyle = lipgloss.NewStyle().
 			Padding(0, 1).
@@ -59,4 +58,7 @@ var (
 	BlueBoarderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#1e66f5"))
+
+	FocusedInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	BlurredInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
