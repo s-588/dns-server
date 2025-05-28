@@ -162,3 +162,44 @@ func (q *Queries) GetTypeName(ctx context.Context, id int64) (string, error) {
 	err := row.Scan(&type_)
 	return type_, err
 }
+
+const updateResourceRecord = `-- name: UpdateResourceRecord :one
+UPDATE resrecords
+SET domain = ?,
+data = ?, 
+typeID = (SELECT id FROM types WHERE type = ?),
+classID = (SELECT id FROM classes WHERE class = ?),
+ttl = ?
+WHERE resrecords.ID = ?
+RETURNING id, domain, data, typeid, classid, ttl
+`
+
+type UpdateResourceRecordParams struct {
+	Domain string
+	Data   string
+	Type   string
+	Class  string
+	Ttl    sql.NullInt64
+	ID     int64
+}
+
+func (q *Queries) UpdateResourceRecord(ctx context.Context, arg UpdateResourceRecordParams) (Resrecord, error) {
+	row := q.db.QueryRowContext(ctx, updateResourceRecord,
+		arg.Domain,
+		arg.Data,
+		arg.Type,
+		arg.Class,
+		arg.Ttl,
+		arg.ID,
+	)
+	var i Resrecord
+	err := row.Scan(
+		&i.ID,
+		&i.Domain,
+		&i.Data,
+		&i.Typeid,
+		&i.Classid,
+		&i.Ttl,
+	)
+	return i, err
+}

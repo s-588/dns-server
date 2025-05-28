@@ -27,33 +27,24 @@ func (m model) rawView() string {
 	}
 
 	// Header with border
-	s.WriteString(style.HeaderStyle.Render("DNS Server Dashboard"))
-	s.WriteString("\n\n")
-
-	// Tabs row
-	tabs := make([]string, len(m.tabs))
-	for i, tab := range m.tabs {
-		if m.selectedTab == i {
-			if m.focusLayer == focusTabs {
-				tabs[i] = style.SelectedButtonStyle.Render(tab.name)
-			} else {
-				tabs[i] = style.SecondarySelectedButtonStyle.Render(tab.name)
-			}
-		} else {
-			tabs[i] = style.ButtonStyle.Render(tab.name)
-		}
-	}
-	buttonsAlignCenter := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
-	s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...)))
+	s.WriteString(style.HeaderStyle.Width(m.width - 6).Render("DNS Server Dashboard"))
 	s.WriteString("\n\n")
 
 	// Content area
 	switch m.focusLayer {
+	case focusUpdatePage:
+		s.WriteString(m.updatePage.View())
+	case focusSortPage:
+		s.WriteString(m.sortPage.View())
+
 	case focusDeletePage:
 		s.WriteString(m.deletePage.View())
 
 	case focusAddPage:
 		s.WriteString(m.addPage.View())
+
+	case focusFilterPage:
+		s.WriteString(m.filterPage.View())
 
 	default:
 		// Tabs row

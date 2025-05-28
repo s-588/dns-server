@@ -95,7 +95,7 @@ func StartServer() {
 		return
 	}
 
-	logFile, err := os.OpenFile("DNSServer.log", os.O_RDWR|os.O_CREATE, 0644)
+	logFile, err := os.OpenFile("DNSServer.log", os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		printError("can't open log file\n" + err.Error())
 		return
@@ -120,7 +120,12 @@ func StartServer() {
 }
 
 func StartTUI() {
-	p := tea.NewProgram(tui.NewModel(), tea.WithAltScreen())
+	m, err := tui.NewModel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't start. %s", err.Error())
+		return
+	}
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		printError("can't open TUI\n" + err.Error())
 	}

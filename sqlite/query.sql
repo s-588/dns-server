@@ -16,6 +16,16 @@ VALUES (
 )
 RETURNING *;
 
+-- name: UpdateResourceRecord :one
+UPDATE resrecords
+SET domain = ?,
+data = ?, 
+typeID = (SELECT id FROM types WHERE type = ?),
+classID = (SELECT id FROM classes WHERE class = ?),
+ttl = ?
+WHERE resrecords.ID = ?
+RETURNING *;
+
 -- name: GetTypeName :one
 SELECT type FROM types WHERE ID = ?;
 

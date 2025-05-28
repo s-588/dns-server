@@ -37,6 +37,26 @@ func NewDB() (DB, error) {
 	}, nil
 }
 
+func (db DB) UpdateRR(id int64, domain, data, rrType, class string, ttl int64) error {
+	rr, err := db.queries.UpdateResourceRecord(context.Background(), query.UpdateResourceRecordParams{
+		ID:     id,
+		Domain: domain,
+		Data:   data,
+		Type:   rrType,
+		Class:  class,
+		Ttl:    sql.NullInt64{ttl, true},
+	})
+	if err != nil {
+		return err
+	}
+
+	emtyRR := query.Resrecord{}
+	if rr == emtyRR {
+		return errors.New("No records was updated")
+	}
+	return nil
+}
+
 func (db DB) AddRR(t, class string, domain string, ip net.IP, ttl int64) error {
 	_, err := db.queries.CreateResourceRecord(context.Background(), query.CreateResourceRecordParams{
 		Domain: domain,
