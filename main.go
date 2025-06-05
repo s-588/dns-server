@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	"github.com/prionis/dns-server/ui"
+	"github.com/prionis/dns-server/internal/cli"
 )
 
 func main() {
@@ -15,21 +15,21 @@ func main() {
 	flagDelRR := flag.Int64("del", -1, "delete resource record. Accept ID of resource record to delete")
 
 	flag.Parse()
-	ui.CheckArgs(flagServer, flagTUI, flagListLog, flagListRR, flagAddRR, flagDelRR)
+	cli.CheckArgs(flagServer, flagTUI, flagListLog, flagListRR, flagAddRR, flagDelRR)
 
 	switch {
 	case *flagAddRR != "":
-		ui.AddRR(*flagAddRR)
+		// ui.AddRR(*flagAddRR)
 	case *flagDelRR != -1:
-		ui.DelRR(*flagDelRR)
+		// ui.DelRR(*flagDelRR)
 	case *flagServer:
-		ui.StartServer()
+		cli.StartServer()
 	case *flagTUI:
-		ui.StartTUI()
+		cli.StartTUI()
 	case *flagListLog:
-		ui.PrintLogList()
+		cli.PrintLogList()
 	case *flagListRR:
-		ui.PrintRRList()
+		// ui.PrintRRList()
 	default:
 		flag.Usage()
 	}

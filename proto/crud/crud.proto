@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package crud.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "./crudpb";
+
+message User {
+  string login = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string password = 4;
+  string role = 5;
+}
+
+message ResourceRecord {
+  int64 id = 1;
+  string domain = 2;
+  string data = 3;
+  string type_id = 4;
+  string class_id = 5;
+  google.protobuf.Timestamp time_to_live = 6;
+}
+
+message Login {
+  string username = 1;
+  string password = 2;
+}
+
+message Register {
+  string login = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string password = 4;
+  string role = 5;
+}

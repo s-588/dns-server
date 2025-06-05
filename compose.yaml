@@ -1,0 +1,24 @@
+services:
+  server:
+    build: .
+    ports:
+      - "1053:1053/udp"
+      - "1053:1053/tcp"
+      - "8083:8083"
+    restart: always
+    env_file:
+      - path: ./dns-server.env
+      - path: ./postgres.env
+  postgres:
+    image: postgres
+    restart: always
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    # or set shared memory limit when deploy via swarm stack
+    #volumes:
+    #  - type: tmpfs
+    #    target: /dev/shm
+    #    tmpfs:
+    #      size: 134217728 # 128*2^20 bytes = 128Mb
+    env_file: "postgres.env"
+
