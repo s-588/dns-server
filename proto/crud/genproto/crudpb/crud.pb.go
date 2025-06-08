@@ -9,7 +9,6 @@ package crudpb
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -24,11 +23,12 @@ const (
 
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Login         string                 `protobuf:"bytes,1,opt,name=login,proto3" json:"login,omitempty"`
-	FirstName     string                 `protobuf:"bytes,2,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
-	LastName      string                 `protobuf:"bytes,3,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
-	Password      string                 `protobuf:"bytes,4,opt,name=password,proto3" json:"password,omitempty"`
-	Role          string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Login         string                 `protobuf:"bytes,2,opt,name=login,proto3" json:"login,omitempty"`
+	FirstName     string                 `protobuf:"bytes,3,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
+	LastName      string                 `protobuf:"bytes,4,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
+	Password      string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
+	Role          string                 `protobuf:"bytes,6,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -61,6 +61,13 @@ func (x *User) ProtoReflect() protoreflect.Message {
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
 	return file_crud_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *User) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
 }
 
 func (x *User) GetLogin() string {
@@ -98,21 +105,65 @@ func (x *User) GetRole() string {
 	return ""
 }
 
+type UserCollection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Users         []*User                `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UserCollection) Reset() {
+	*x = UserCollection{}
+	mi := &file_crud_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserCollection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserCollection) ProtoMessage() {}
+
+func (x *UserCollection) ProtoReflect() protoreflect.Message {
+	mi := &file_crud_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserCollection.ProtoReflect.Descriptor instead.
+func (*UserCollection) Descriptor() ([]byte, []int) {
+	return file_crud_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *UserCollection) GetUsers() []*User {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
 type ResourceRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	Data          string                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	TypeId        string                 `protobuf:"bytes,4,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"`
-	ClassId       string                 `protobuf:"bytes,5,opt,name=class_id,json=classId,proto3" json:"class_id,omitempty"`
-	TimeToLive    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=time_to_live,json=timeToLive,proto3" json:"time_to_live,omitempty"`
+	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
+	Class         string                 `protobuf:"bytes,5,opt,name=class,proto3" json:"class,omitempty"`
+	TimeToLive    int32                  `protobuf:"varint,6,opt,name=time_to_live,json=timeToLive,proto3" json:"time_to_live,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResourceRecord) Reset() {
 	*x = ResourceRecord{}
-	mi := &file_crud_proto_msgTypes[1]
+	mi := &file_crud_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -124,7 +175,7 @@ func (x *ResourceRecord) String() string {
 func (*ResourceRecord) ProtoMessage() {}
 
 func (x *ResourceRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_crud_proto_msgTypes[1]
+	mi := &file_crud_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -137,7 +188,7 @@ func (x *ResourceRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceRecord.ProtoReflect.Descriptor instead.
 func (*ResourceRecord) Descriptor() ([]byte, []int) {
-	return file_crud_proto_rawDescGZIP(), []int{1}
+	return file_crud_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ResourceRecord) GetId() int64 {
@@ -161,23 +212,67 @@ func (x *ResourceRecord) GetData() string {
 	return ""
 }
 
-func (x *ResourceRecord) GetTypeId() string {
+func (x *ResourceRecord) GetType() string {
 	if x != nil {
-		return x.TypeId
+		return x.Type
 	}
 	return ""
 }
 
-func (x *ResourceRecord) GetClassId() string {
+func (x *ResourceRecord) GetClass() string {
 	if x != nil {
-		return x.ClassId
+		return x.Class
 	}
 	return ""
 }
 
-func (x *ResourceRecord) GetTimeToLive() *timestamppb.Timestamp {
+func (x *ResourceRecord) GetTimeToLive() int32 {
 	if x != nil {
 		return x.TimeToLive
+	}
+	return 0
+}
+
+type ResourceRecordCollection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Records       []*ResourceRecord      `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResourceRecordCollection) Reset() {
+	*x = ResourceRecordCollection{}
+	mi := &file_crud_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResourceRecordCollection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResourceRecordCollection) ProtoMessage() {}
+
+func (x *ResourceRecordCollection) ProtoReflect() protoreflect.Message {
+	mi := &file_crud_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResourceRecordCollection.ProtoReflect.Descriptor instead.
+func (*ResourceRecordCollection) Descriptor() ([]byte, []int) {
+	return file_crud_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ResourceRecordCollection) GetRecords() []*ResourceRecord {
+	if x != nil {
+		return x.Records
 	}
 	return nil
 }
@@ -192,7 +287,7 @@ type Login struct {
 
 func (x *Login) Reset() {
 	*x = Login{}
-	mi := &file_crud_proto_msgTypes[2]
+	mi := &file_crud_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -204,7 +299,7 @@ func (x *Login) String() string {
 func (*Login) ProtoMessage() {}
 
 func (x *Login) ProtoReflect() protoreflect.Message {
-	mi := &file_crud_proto_msgTypes[2]
+	mi := &file_crud_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -217,7 +312,7 @@ func (x *Login) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Login.ProtoReflect.Descriptor instead.
 func (*Login) Descriptor() ([]byte, []int) {
-	return file_crud_proto_rawDescGZIP(), []int{2}
+	return file_crud_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Login) GetUsername() string {
@@ -247,7 +342,7 @@ type Register struct {
 
 func (x *Register) Reset() {
 	*x = Register{}
-	mi := &file_crud_proto_msgTypes[3]
+	mi := &file_crud_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -259,7 +354,7 @@ func (x *Register) String() string {
 func (*Register) ProtoMessage() {}
 
 func (x *Register) ProtoReflect() protoreflect.Message {
-	mi := &file_crud_proto_msgTypes[3]
+	mi := &file_crud_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -272,7 +367,7 @@ func (x *Register) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Register.ProtoReflect.Descriptor instead.
 func (*Register) Descriptor() ([]byte, []int) {
-	return file_crud_proto_rawDescGZIP(), []int{3}
+	return file_crud_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Register) GetLogin() string {
@@ -315,22 +410,27 @@ var File_crud_proto protoreflect.FileDescriptor
 const file_crud_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"crud.proto\x12\acrud.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x88\x01\n" +
-	"\x04User\x12\x14\n" +
-	"\x05login\x18\x01 \x01(\tR\x05login\x12\x1d\n" +
+	"crud.proto\x12\acrud.v1\"\x98\x01\n" +
+	"\x04User\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x14\n" +
+	"\x05login\x18\x02 \x01(\tR\x05login\x12\x1d\n" +
 	"\n" +
-	"first_name\x18\x02 \x01(\tR\tfirstName\x12\x1b\n" +
-	"\tlast_name\x18\x03 \x01(\tR\blastName\x12\x1a\n" +
-	"\bpassword\x18\x04 \x01(\tR\bpassword\x12\x12\n" +
-	"\x04role\x18\x05 \x01(\tR\x04role\"\xbe\x01\n" +
+	"first_name\x18\x03 \x01(\tR\tfirstName\x12\x1b\n" +
+	"\tlast_name\x18\x04 \x01(\tR\blastName\x12\x1a\n" +
+	"\bpassword\x18\x05 \x01(\tR\bpassword\x12\x12\n" +
+	"\x04role\x18\x06 \x01(\tR\x04role\"5\n" +
+	"\x0eUserCollection\x12#\n" +
+	"\x05users\x18\x01 \x03(\v2\r.crud.v1.UserR\x05users\"\x98\x01\n" +
 	"\x0eResourceRecord\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\tR\x04data\x12\x17\n" +
-	"\atype_id\x18\x04 \x01(\tR\x06typeId\x12\x19\n" +
-	"\bclass_id\x18\x05 \x01(\tR\aclassId\x12<\n" +
-	"\ftime_to_live\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"timeToLive\"?\n" +
+	"\x04data\x18\x03 \x01(\tR\x04data\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04type\x12\x14\n" +
+	"\x05class\x18\x05 \x01(\tR\x05class\x12 \n" +
+	"\ftime_to_live\x18\x06 \x01(\x05R\n" +
+	"timeToLive\"M\n" +
+	"\x18ResourceRecordCollection\x121\n" +
+	"\arecords\x18\x01 \x03(\v2\x17.crud.v1.ResourceRecordR\arecords\"?\n" +
 	"\x05Login\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x8c\x01\n" +
@@ -355,21 +455,23 @@ func file_crud_proto_rawDescGZIP() []byte {
 	return file_crud_proto_rawDescData
 }
 
-var file_crud_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_crud_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_crud_proto_goTypes = []any{
-	(*User)(nil),                  // 0: crud.v1.User
-	(*ResourceRecord)(nil),        // 1: crud.v1.ResourceRecord
-	(*Login)(nil),                 // 2: crud.v1.Login
-	(*Register)(nil),              // 3: crud.v1.Register
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*User)(nil),                     // 0: crud.v1.User
+	(*UserCollection)(nil),           // 1: crud.v1.UserCollection
+	(*ResourceRecord)(nil),           // 2: crud.v1.ResourceRecord
+	(*ResourceRecordCollection)(nil), // 3: crud.v1.ResourceRecordCollection
+	(*Login)(nil),                    // 4: crud.v1.Login
+	(*Register)(nil),                 // 5: crud.v1.Register
 }
 var file_crud_proto_depIdxs = []int32{
-	4, // 0: crud.v1.ResourceRecord.time_to_live:type_name -> google.protobuf.Timestamp
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 0: crud.v1.UserCollection.users:type_name -> crud.v1.User
+	2, // 1: crud.v1.ResourceRecordCollection.records:type_name -> crud.v1.ResourceRecord
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_crud_proto_init() }
@@ -383,7 +485,7 @@ func file_crud_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_crud_proto_rawDesc), len(file_crud_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
