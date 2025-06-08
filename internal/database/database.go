@@ -3,22 +3,23 @@ package database
 import "context"
 
 type Repository interface {
-	UpdateRR(ctx context.Context, rr ResourceRecord) error
-	AddRR(ctx context.Context, rr ResourceRecord) error
-	DelRR(ctx context.Context, id int64) error
-	GetAllRRs() ([]ResourceRecord, error)
-	GetRRs(name, rrType string) ([]ResourceRecord, error)
+	AddRecord(ctx context.Context, rr ResourceRecord) error
+	GetAllRecords() ([]ResourceRecord, error)
+	GetRecord(id int32) (ResourceRecord, error)
+	FindRecords(name, rrType string) ([]ResourceRecord, error)
+	UpdateRecord(ctx context.Context, rr ResourceRecord) error
+	DeleteRecord(ctx context.Context, id int32) error
 	GetAllUsers(ctx context.Context) ([]User, error)
 	GetUser(ctx context.Context, login string) (User, error)
 	CheckUserPassword(ctx context.Context, login, pass string) (User, error)
-	RegisterNewUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error)
+	AddUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error)
 	DeleteUser(ctx context.Context, id int32) error
 	UpdateUser(ctx context.Context, user User) error
 }
 
 // ResourceRecord structure represent resource record in the dabase.
 type ResourceRecord struct {
-	ID      int64
+	ID      int32
 	Domain  string
 	Data    string
 	Type    string
@@ -29,7 +30,7 @@ type ResourceRecord struct {
 }
 
 type User struct {
-	ID        int64
+	ID        int32
 	Login     string
 	FirstName string
 	LastName  string

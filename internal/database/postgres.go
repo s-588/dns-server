@@ -42,23 +42,11 @@ func GetConnectionString() string {
 		os.Getenv("POSTGRES_DB"))
 }
 
-func (repo Postgres) UpdateRR(ctx context.Context, rr ResourceRecord) error {
-	_, err := repo.db.UpdateResourceRecord(context.Background(), sqlc.UpdateResourceRecordParams{
-		ID:         int32(rr.ID),
-		Domain:     rr.Domain,
-		Data:       rr.Data,
-		Type:       rr.Type,
-		Class:      rr.Class,
-		TimeToLive: pgtype.Int4{rr.TTL, true},
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+func (repo Postgres) GetRecord(id int32) (ResourceRecord, error) {
+	return ResourceRecord{}, nil
 }
 
-func (repo Postgres) AddRR(ctx context.Context, rr ResourceRecord) error {
+func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) error {
 	_, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
 		Domain:     rr.Domain,
 		Type:       rr.Type,
@@ -72,16 +60,7 @@ func (repo Postgres) AddRR(ctx context.Context, rr ResourceRecord) error {
 	return nil
 }
 
-func (repo Postgres) DelRR(ctx context.Context, id int64) error {
-	err := repo.db.DeleteResourceRecord(ctx, int32(id))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (repo Postgres) GetAllRRs() ([]ResourceRecord, error) {
+func (repo Postgres) GetAllRecords() ([]ResourceRecord, error) {
 	rrs, err := repo.db.GetAllResourceRecord(context.Background())
 	if err != nil {
 		return nil, err
@@ -90,7 +69,7 @@ func (repo Postgres) GetAllRRs() ([]ResourceRecord, error) {
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
 		resourceRecords = append(resourceRecords, ResourceRecord{
-			ID:      int64(record.ID),
+			ID:      record.ID,
 			Domain:  record.Domain,
 			Type:    record.Type,
 			Class:   record.Class,
@@ -106,7 +85,32 @@ func (repo Postgres) GetAllRRs() ([]ResourceRecord, error) {
 	return resourceRecords, nil
 }
 
-func (repo Postgres) GetRRs(name, rrType string) ([]ResourceRecord, error) {
+func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error {
+	_, err := repo.db.UpdateResourceRecord(context.Background(), sqlc.UpdateResourceRecordParams{
+		ID:         rr.ID,
+		Domain:     rr.Domain,
+		Data:       rr.Data,
+		Type:       rr.Type,
+		Class:      rr.Class,
+		TimeToLive: pgtype.Int4{rr.TTL, true},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (repo Postgres) DeleteRecord(ctx context.Context, id int32) error {
+	err := repo.db.DeleteResourceRecord(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (repo Postgres) FindRecords(name, rrType string) ([]ResourceRecord, error) {
 	rrs, err := repo.db.GetResourceRecords(context.Background(), sqlc.GetResourceRecordsParams{name, rrType})
 	if err != nil {
 		return nil, err
@@ -127,25 +131,6 @@ func (repo Postgres) GetRRs(name, rrType string) ([]ResourceRecord, error) {
 	return resourceRecords, nil
 }
 
-func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
-	usersRows, err := repo.db.GetAllUsers(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	users := make([]User, 0, len(usersRows))
-	for _, user := range usersRows {
-		users = append(users, User{
-			ID:        int64(user.ID),
-			Login:     user.Login,
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Role:      user.Role,
-		})
-	}
-	return users, nil
-}
-
 func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
@@ -160,7 +145,36 @@ func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	}, nil
 }
 
-func (repo Postgres) RegisterNewUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error) {
+func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
+	usersRows, err := repo.db.GetAllUsers(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]User, 0, len(usersRows))
+	for _, user := range usersRows {
+		users = append(users, User{
+			ID:        user.ID,
+			Login:     user.Login,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Role:      user.Role,
+		})
+	}
+	return users, nil
+}
+
+func (repo Postgres) UpdateUser(ctx context.Context, user User) error {
+	return repo.db.UpdateUser(ctx, sqlc.UpdateUserParams{
+		ID:        int32(user.ID),
+		Login:     user.Login,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
+	})
+}
+
+func (repo Postgres) AddUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error) {
 	if len(firstName) < 2 {
 		return User{}, fmt.Errorf("can't use name %s, the length less than 2")
 	}
@@ -213,7 +227,7 @@ func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) 
 	}
 
 	return User{
-		ID:        int64(user.ID),
+		ID:        user.ID,
 		Login:     user.Login,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
@@ -223,14 +237,4 @@ func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) 
 
 func (repo Postgres) DeleteUser(ctx context.Context, id int32) error {
 	return repo.db.DeleteUser(ctx, id)
-}
-
-func (repo Postgres) UpdateUser(ctx context.Context, user User) error {
-	return repo.db.UpdateUser(ctx, sqlc.UpdateUserParams{
-		ID:        int32(user.ID),
-		Login:     user.Login,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
-		Role:      user.Role,
-	})
 }

@@ -23,7 +23,7 @@ const (
 
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Login         string                 `protobuf:"bytes,2,opt,name=login,proto3" json:"login,omitempty"`
 	FirstName     string                 `protobuf:"bytes,3,opt,name=first_name,json=firstName,proto3" json:"first_name,omitempty"`
 	LastName      string                 `protobuf:"bytes,4,opt,name=last_name,json=lastName,proto3" json:"last_name,omitempty"`
@@ -63,7 +63,7 @@ func (*User) Descriptor() ([]byte, []int) {
 	return file_crud_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *User) GetId() int64 {
+func (x *User) GetId() int32 {
 	if x != nil {
 		return x.Id
 	}
@@ -151,7 +151,7 @@ func (x *UserCollection) GetUsers() []*User {
 
 type ResourceRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	Data          string                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
@@ -191,7 +191,7 @@ func (*ResourceRecord) Descriptor() ([]byte, []int) {
 	return file_crud_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ResourceRecord) GetId() int64 {
+func (x *ResourceRecord) GetId() int32 {
 	if x != nil {
 		return x.Id
 	}
@@ -412,7 +412,7 @@ const file_crud_proto_rawDesc = "" +
 	"\n" +
 	"crud.proto\x12\acrud.v1\"\x98\x01\n" +
 	"\x04User\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x14\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
 	"\x05login\x18\x02 \x01(\tR\x05login\x12\x1d\n" +
 	"\n" +
 	"first_name\x18\x03 \x01(\tR\tfirstName\x12\x1b\n" +
@@ -422,7 +422,7 @@ const file_crud_proto_rawDesc = "" +
 	"\x0eUserCollection\x12#\n" +
 	"\x05users\x18\x01 \x03(\v2\r.crud.v1.UserR\x05users\"\x98\x01\n" +
 	"\x0eResourceRecord\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x16\n" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x12\n" +
 	"\x04data\x18\x03 \x01(\tR\x04data\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x14\n" +

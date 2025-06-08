@@ -78,7 +78,8 @@ func (s Server) serveHTTP() {
 		})
 
 		r.Route("/rrs", func(r chi.Router) {
-			r.Get("/", s.getResourceRecordsHandler)
+			r.Get("/all", s.getAllRecordsHandler)
+			r.Get("/{id}", s.getRecordHandler)
 			r.Delete("/{id}", s.deleteRRHandler)
 			r.Post("/", s.postRRHandler)
 			r.Patch("/{id}", s.patchRRHandler)

@@ -20,7 +20,7 @@ func (s Server) dnsHandler(w dns.ResponseWriter, msg *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(msg)
 	for _, question := range m.Question {
-		answers, err := s.db.GetRRs(question.Name, dns.TypeToString[question.Qtype])
+		answers, err := s.db.FindRecords(question.Name, dns.TypeToString[question.Qtype])
 		if err != nil {
 			slog.Error("can't get resource records from database: " + err.Error())
 		}
@@ -146,7 +146,7 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.db.RegisterNewUser(r.Context(),
+	user, err := s.db.AddUser(r.Context(),
 		credentials.GetLogin(),
 		credentials.GetFirstName(),
 		credentials.GetLastName(),
@@ -204,8 +204,36 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("Login request handled")
 }
 
-func (s Server) getResourceRecordsHandler(w http.ResponseWriter, r *http.Request) {
-	rrs, err := s.db.GetAllRRs()
+func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		s.logger.Error("id is not specified in the path")
+		http.Error(w, "Id of the record is not specified in the path", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.db.GetUser(r.Context(), id)
+	if err != nil {
+		s.logger.Error("can't get user: " + err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	u := &crudpb.User{
+		Id:        user.ID,
+		Login:     user.Login,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
+	}
+	b, err := proto.Marshal(u)
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(b)
+	s.logger.Info("Login request handled")
+}
+
+func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
+	rrs, err := s.db.GetAllRecords()
 	if err != nil {
 		s.logger.Error("can't get records form databas: " + err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -381,14 +409,14 @@ func (s Server) deleteRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.ParseInt(pathID, 10, 64)
+	id, err := strconv.ParseInt(pathID, 10, 32)
 	if err != nil {
 		s.logger.Error("can't parse id to delete: " + err.Error())
 		http.Error(w, "Incorrect id", http.StatusBadRequest)
 		return
 	}
 
-	err = s.db.DelRR(r.Context(), id)
+	err = s.db.DeleteRecord(r.Context(), int32(id))
 	if err != nil {
 		s.logger.Error("can't delete resource record: " + err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -422,7 +450,7 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.db.AddRR(r.Context(),
+	err = s.db.AddRecord(r.Context(),
 		database.ResourceRecord{
 			Domain: rr.Domain,
 			Data:   rr.Data,
@@ -465,7 +493,7 @@ func (s Server) patchRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.db.UpdateRR(r.Context(),
+	err = s.db.UpdateRecord(r.Context(),
 		database.ResourceRecord{
 			ID:     rr.Id,
 			Domain: rr.Domain,
