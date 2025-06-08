@@ -14,42 +14,25 @@ import (
 	"github.com/prionis/dns-server/internal/database/sqlc"
 )
 
-type Repository struct {
+type Postgres struct {
 	db *sqlc.Queries
 }
 
-// ResourceRecord structure represent resource record in the dabase.
-type ResourceRecord struct {
-	ID     int64
-	Domain string
-	Data   string
-	Type   string
-	Class  string
-	TTL    int64
-}
-
-type User struct {
-	Login     string
-	FirstName string
-	LastName  string
-	Role      string
-}
-
-func NewPostgres(connString string) (Repository, error) {
+func NewPostgres(connString string) (Postgres, error) {
 	if connString == "" {
 		connString = GetConnectionString()
 	}
 	conn, err := pgx.Connect(context.Background(), connString)
 	if err != nil {
-		return Repository{}, fmt.Errorf("can't connect to  %w", err)
+		return Postgres{}, fmt.Errorf("can't connect to  %w", err)
 	}
 	if err = conn.Ping(context.Background()); err != nil {
-		return Repository{}, fmt.Errorf("can't ping the database: %w", err)
+		return Postgres{}, fmt.Errorf("can't ping the database: %w", err)
 	}
 
 	db := sqlc.New(conn)
 
-	return Repository{db}, nil
+	return Postgres{db}, nil
 }
 
 func GetConnectionString() string {
@@ -59,14 +42,14 @@ func GetConnectionString() string {
 		os.Getenv("POSTGRES_DB"))
 }
 
-func (repo Repository) UpdateRR(ctx context.Context, rr ResourceRecord) error {
+func (repo Postgres) UpdateRR(ctx context.Context, rr ResourceRecord) error {
 	_, err := repo.db.UpdateResourceRecord(context.Background(), sqlc.UpdateResourceRecordParams{
 		ID:         int32(rr.ID),
 		Domain:     rr.Domain,
 		Data:       rr.Data,
 		Type:       rr.Type,
 		Class:      rr.Class,
-		TimeToLive: pgtype.Int4{int32(rr.TTL), true},
+		TimeToLive: pgtype.Int4{rr.TTL, true},
 	})
 	if err != nil {
 		return err
@@ -75,8 +58,8 @@ func (repo Repository) UpdateRR(ctx context.Context, rr ResourceRecord) error {
 	return nil
 }
 
-func (repo Repository) AddRR(rr ResourceRecord) error {
-	_, err := repo.db.CreateResourceRecord(context.Background(), sqlc.CreateResourceRecordParams{
+func (repo Postgres) AddRR(ctx context.Context, rr ResourceRecord) error {
+	_, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
 		Domain:     rr.Domain,
 		Type:       rr.Type,
 		Class:      rr.Class,
@@ -89,8 +72,8 @@ func (repo Repository) AddRR(rr ResourceRecord) error {
 	return nil
 }
 
-func (repo Repository) DelRR(id int64) error {
-	_, err := repo.db.DeleteResourceRecord(context.Background(), int32(id))
+func (repo Postgres) DelRR(ctx context.Context, id int64) error {
+	err := repo.db.DeleteResourceRecord(ctx, int32(id))
 	if err != nil {
 		return err
 	}
@@ -98,7 +81,7 @@ func (repo Repository) DelRR(id int64) error {
 	return nil
 }
 
-func (repo Repository) GetAllRRs() ([]ResourceRecord, error) {
+func (repo Postgres) GetAllRRs() ([]ResourceRecord, error) {
 	rrs, err := repo.db.GetAllResourceRecord(context.Background())
 	if err != nil {
 		return nil, err
@@ -107,12 +90,14 @@ func (repo Repository) GetAllRRs() ([]ResourceRecord, error) {
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
 		resourceRecords = append(resourceRecords, ResourceRecord{
-			ID:     int64(record.ID),
-			Domain: record.Domain,
-			Type:   record.Type,
-			Class:  record.Class,
-			TTL:    int64(record.TimeToLive.Int32),
-			Data:   record.Data,
+			ID:      int64(record.ID),
+			Domain:  record.Domain,
+			Type:    record.Type,
+			Class:   record.Class,
+			ClassID: int(record.ClassID),
+			TypeID:  int(record.TypeID),
+			TTL:     record.TimeToLive.Int32,
+			Data:    record.Data,
 		})
 	}
 	if len(resourceRecords) <= 0 {
@@ -121,7 +106,7 @@ func (repo Repository) GetAllRRs() ([]ResourceRecord, error) {
 	return resourceRecords, nil
 }
 
-func (repo Repository) GetRRs(name, rrType string) ([]ResourceRecord, error) {
+func (repo Postgres) GetRRs(name, rrType string) ([]ResourceRecord, error) {
 	rrs, err := repo.db.GetResourceRecords(context.Background(), sqlc.GetResourceRecordsParams{name, rrType})
 	if err != nil {
 		return nil, err
@@ -130,17 +115,38 @@ func (repo Repository) GetRRs(name, rrType string) ([]ResourceRecord, error) {
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
 		resourceRecords = append(resourceRecords, ResourceRecord{
-			Domain: record.Domain,
-			Type:   record.Type,
-			Class:  record.Class,
-			TTL:    int64(record.TimeToLive.Int32),
-			Data:   record.Data,
+			Domain:  record.Domain,
+			Type:    record.Type,
+			Class:   record.Class,
+			TypeID:  int(record.TypeID),
+			ClassID: int(record.ClassID),
+			TTL:     record.TimeToLive.Int32,
+			Data:    record.Data,
 		})
 	}
 	return resourceRecords, nil
 }
 
-func (repo Repository) GetUser(ctx context.Context, login string) (User, error) {
+func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
+	usersRows, err := repo.db.GetAllUsers(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]User, 0, len(usersRows))
+	for _, user := range usersRows {
+		users = append(users, User{
+			ID:        int64(user.ID),
+			Login:     user.Login,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Role:      user.Role,
+		})
+	}
+	return users, nil
+}
+
+func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
 		return User{}, fmt.Errorf("can't get user from database: %w", err)
@@ -154,7 +160,7 @@ func (repo Repository) GetUser(ctx context.Context, login string) (User, error) 
 	}, nil
 }
 
-func (repo Repository) RegisterNewUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error) {
+func (repo Postgres) RegisterNewUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error) {
 	if len(firstName) < 2 {
 		return User{}, fmt.Errorf("can't use name %s, the length less than 2")
 	}
@@ -200,13 +206,31 @@ func (repo Repository) RegisterNewUser(ctx context.Context, login, firstName, la
 	}, nil
 }
 
-func (repo Repository) CheckUserPassword(ctx context.Context, login, pass string) error {
+func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
-		return fmt.Errorf("can't get user from database: %w", err)
+		return User{}, fmt.Errorf("can't get user from database: %w", err)
 	}
 
-	// h, err := bcrypt.GenerateFromPassword([]byte(pass), 12)
-	// return fmt.Errorf("hash in db: %s; user pass: %s; hash from pass: %s %w", user.Password, pass, h, err)
-	return bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(pass))
+	return User{
+		ID:        int64(user.ID),
+		Login:     user.Login,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
+	}, bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(pass))
+}
+
+func (repo Postgres) DeleteUser(ctx context.Context, id int32) error {
+	return repo.db.DeleteUser(ctx, id)
+}
+
+func (repo Postgres) UpdateUser(ctx context.Context, user User) error {
+	return repo.db.UpdateUser(ctx, sqlc.UpdateUserParams{
+		ID:        int32(user.ID),
+		Login:     user.Login,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
+	})
 }
