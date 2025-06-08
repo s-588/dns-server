@@ -1,8 +1,6 @@
 package server
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/websocket"
 	"github.com/miekg/dns"
 
 	"github.com/prionis/dns-server/internal/database"
@@ -21,6 +20,7 @@ type Server struct {
 	httpPort string
 	logger   Logger
 	db       database.Repository
+	wsConns  []*websocket.Conn
 }
 
 func NewServer(opts ...Option) (Server, error) {
@@ -40,12 +40,6 @@ func NewServer(opts ...Option) (Server, error) {
 		httpPort: ":8083",
 		db:       conf.db,
 		logger:   conf.logger,
-	}
-	user, err := s.db.RegisterNewUser(context.Background(), "admin", "admin", "admin", "admin1+", "admin")
-	if err != nil {
-		s.logger.Debug("GOVNOOOOO: " + err.Error())
-	} else {
-		s.logger.Info(fmt.Sprintf("%v", user))
 	}
 	return s, nil
 }
@@ -77,7 +71,8 @@ func (s Server) serveHTTP() {
 
 	router.Route("/api", func(r chi.Router) {
 		r.Route("/users", func(r chi.Router) {
-			r.Get("/", s.getUsersHandler)
+			r.Get("/all", s.getAllUsersHandler)
+			r.Get("/{login}", s.getUserHandler)
 			r.Delete("/", s.deleteUserHandler)
 			r.Patch("/", s.patchUserHandler)
 		})
