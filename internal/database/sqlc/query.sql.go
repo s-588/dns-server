@@ -91,24 +91,24 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
-const deleteResourceRecord = `-- name: DeleteResourceRecord :one
+const deleteResourceRecord = `-- name: DeleteResourceRecord :exec
 DELETE FROM resource_records
 WHERE id = $1
-RETURNING id, domain, data, type_id, class_id, time_to_live
 `
 
-func (q *Queries) DeleteResourceRecord(ctx context.Context, id int32) (ResourceRecord, error) {
-	row := q.db.QueryRow(ctx, deleteResourceRecord, id)
-	var i ResourceRecord
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.Data,
-		&i.TypeID,
-		&i.ClassID,
-		&i.TimeToLive,
-	)
-	return i, err
+func (q *Queries) DeleteResourceRecord(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteResourceRecord, id)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users
+WHERE users.id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteUser, id)
+	return err
 }
 
 const getAllResourceRecord = `-- name: GetAllResourceRecord :many
@@ -147,6 +147,45 @@ func (q *Queries) GetAllResourceRecord(ctx context.Context) ([]GetAllResourceRec
 			&i.TimeToLive,
 			&i.Type,
 			&i.Class,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllUsers = `-- name: GetAllUsers :many
+SELECT users.id, login, first_name, last_name, role
+FROM users INNER JOIN roles ON users.role_id = roles.id
+`
+
+type GetAllUsersRow struct {
+	ID        int32  `db:"id" json:"id"`
+	Login     string `db:"login" json:"login"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+	Role      string `db:"role" json:"role"`
+}
+
+func (q *Queries) GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error) {
+	rows, err := q.db.Query(ctx, getAllUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllUsersRow
+	for rows.Next() {
+		var i GetAllUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Login,
+			&i.FirstName,
+			&i.LastName,
+			&i.Role,
 		); err != nil {
 			return nil, err
 		}
@@ -212,12 +251,13 @@ func (q *Queries) GetResourceRecords(ctx context.Context, arg GetResourceRecords
 }
 
 const getUser = `-- name: GetUser :one
-SELECT login, first_name, last_name, role, password
+SELECT users.id, login, first_name, last_name, role, password
 FROM users INNER JOIN roles ON users.role_id = roles.id
 WHERE users.login = $1
 `
 
 type GetUserRow struct {
+	ID        int32  `db:"id" json:"id"`
 	Login     string `db:"login" json:"login"`
 	FirstName string `db:"first_name" json:"first_name"`
 	LastName  string `db:"last_name" json:"last_name"`
@@ -229,6 +269,7 @@ func (q *Queries) GetUser(ctx context.Context, login string) (GetUserRow, error)
 	row := q.db.QueryRow(ctx, getUser, login)
 	var i GetUserRow
 	err := row.Scan(
+		&i.ID,
 		&i.Login,
 		&i.FirstName,
 		&i.LastName,
@@ -277,4 +318,29 @@ func (q *Queries) UpdateResourceRecord(ctx context.Context, arg UpdateResourceRe
 		&i.TimeToLive,
 	)
 	return i, err
+}
+
+const updateUser = `-- name: UpdateUser :exec
+UPDATE users
+SET login = $2, first_name = $3, last_name = $4, role_id = (SELECT id FROM roles WHERE role = $5)
+WHERE users.id = $1
+`
+
+type UpdateUserParams struct {
+	ID        int32  `db:"id" json:"id"`
+	Login     string `db:"login" json:"login"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+	Role      string `db:"role" json:"role"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	_, err := q.db.Exec(ctx, updateUser,
+		arg.ID,
+		arg.Login,
+		arg.FirstName,
+		arg.LastName,
+		arg.Role,
+	)
+	return err
 }

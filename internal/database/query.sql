@@ -32,10 +32,9 @@ SET domain = $1,
 WHERE resource_records.id = $6
 RETURNING *;
 
--- name: DeleteResourceRecord :one
+-- name: DeleteResourceRecord :exec
 DELETE FROM resource_records
-WHERE id = $1
-RETURNING *;
+WHERE id = $1 ;
 
 -- name: CreateUser :one
 INSERT INTO users (login, first_name, last_name,password,role_id)
@@ -49,6 +48,19 @@ VALUES (
 RETURNING *;
 
 -- name: GetUser :one
-SELECT login, first_name, last_name, role, password
+SELECT users.id, login, first_name, last_name, role, password
 FROM users INNER JOIN roles ON users.role_id = roles.id
 WHERE users.login = $1;
+
+-- name: GetAllUsers :many
+SELECT users.id, login, first_name, last_name, role
+FROM users INNER JOIN roles ON users.role_id = roles.id;
+
+-- name: DeleteUser :exec
+DELETE FROM users
+WHERE users.id = $1;
+
+-- name: UpdateUser :exec
+UPDATE users
+SET login = $2, first_name = $3, last_name = $4, role_id = (SELECT id FROM roles WHERE role = $5)
+WHERE users.id = $1;
