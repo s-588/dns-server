@@ -72,7 +72,7 @@ func (s Server) serveHTTP() {
 	router.Route("/api", func(r chi.Router) {
 		r.Route("/users", func(r chi.Router) {
 			r.Get("/all", s.getAllUsersHandler)
-			r.Get("/{login}", s.getUserHandler)
+			r.Get("/{id}", s.getUserHandler)
 			r.Delete("/", s.deleteUserHandler)
 			r.Patch("/", s.patchUserHandler)
 		})
