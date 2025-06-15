@@ -14,10 +14,12 @@ import (
 	"github.com/prionis/dns-server/internal/database/sqlc"
 )
 
+// Postgres struct represent connection to the PostgreSQL database.
 type Postgres struct {
 	db *sqlc.Queries
 }
 
+// NewPostgres create new connection to the PostgreSQL database.
 func NewPostgres(connString string) (Postgres, error) {
 	if connString == "" {
 		connString = GetConnectionString()
@@ -35,6 +37,7 @@ func NewPostgres(connString string) (Postgres, error) {
 	return Postgres{db}, nil
 }
 
+// GetConnectionString return the formated connection string for connecting to the PostgreSQL.
 func GetConnectionString() string {
 	return fmt.Sprintf("postgres://%s:%s@postgres:5432/%s?sslmode=disable",
 		os.Getenv("POSTGRES_USER"),
@@ -42,12 +45,25 @@ func GetConnectionString() string {
 		os.Getenv("POSTGRES_DB"))
 }
 
-func (repo Postgres) GetRecord(id int32) (ResourceRecord, error) {
-	return ResourceRecord{}, nil
+// GetRecord return the resource record with provided id.
+func (repo Postgres) GetRecord(ctx context.Context, id int32) (ResourceRecord, error) {
+	rr, err := repo.db.GetResourceRecordByID(ctx, id)
+	if err != nil {
+		return ResourceRecord{}, err
+	}
+	return ResourceRecord{
+		ID:     rr.ID,
+		Domain: rr.Domain,
+		Data:   rr.Data,
+		Type:   rr.Type,
+		Class:  rr.Class,
+		TTL:    rr.TimeToLive.Int32,
+	}, nil
 }
 
-func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) error {
-	_, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
+// AddRecord insert record in the database and return this record with ID settled ID.
+func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (ResourceRecord, error) {
+	newRR, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
 		Domain:     rr.Domain,
 		Type:       rr.Type,
 		Class:      rr.Class,
@@ -55,13 +71,21 @@ func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) error {
 		TimeToLive: pgtype.Int4{int32(rr.TTL), true},
 	})
 	if err != nil {
-		return err
+		return ResourceRecord{}, err
 	}
-	return nil
+	return ResourceRecord{
+		ID:     newRR.ID,
+		Domain: newRR.Domain,
+		Type:   rr.Type,
+		Class:  rr.Class,
+		Data:   newRR.Data,
+		TTL:    newRR.TimeToLive.Int32,
+	}, nil
 }
 
-func (repo Postgres) GetAllRecords() ([]ResourceRecord, error) {
-	rrs, err := repo.db.GetAllResourceRecord(context.Background())
+// GetAllRecords return all the resource records from the database
+func (repo Postgres) GetAllRecords(ctx context.Context) ([]ResourceRecord, error) {
+	rrs, err := repo.db.GetAllResourceRecord(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -69,14 +93,12 @@ func (repo Postgres) GetAllRecords() ([]ResourceRecord, error) {
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
 		resourceRecords = append(resourceRecords, ResourceRecord{
-			ID:      record.ID,
-			Domain:  record.Domain,
-			Type:    record.Type,
-			Class:   record.Class,
-			ClassID: int(record.ClassID),
-			TypeID:  int(record.TypeID),
-			TTL:     record.TimeToLive.Int32,
-			Data:    record.Data,
+			ID:     record.ID,
+			Domain: record.Domain,
+			Type:   record.Type,
+			Class:  record.Class,
+			TTL:    record.TimeToLive.Int32,
+			Data:   record.Data,
 		})
 	}
 	if len(resourceRecords) <= 0 {
@@ -85,6 +107,7 @@ func (repo Postgres) GetAllRecords() ([]ResourceRecord, error) {
 	return resourceRecords, nil
 }
 
+// UpdateRecord update record with provided ID and values.
 func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error {
 	_, err := repo.db.UpdateResourceRecord(context.Background(), sqlc.UpdateResourceRecordParams{
 		ID:         rr.ID,
@@ -101,6 +124,7 @@ func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error 
 	return nil
 }
 
+// DeleteRecord delete record with provided ID.
 func (repo Postgres) DeleteRecord(ctx context.Context, id int32) error {
 	err := repo.db.DeleteResourceRecord(ctx, id)
 	if err != nil {
@@ -110,8 +134,9 @@ func (repo Postgres) DeleteRecord(ctx context.Context, id int32) error {
 	return nil
 }
 
-func (repo Postgres) FindRecords(name, rrType string) ([]ResourceRecord, error) {
-	rrs, err := repo.db.GetResourceRecords(context.Background(), sqlc.GetResourceRecordsParams{name, rrType})
+// FindRecords return resource records with provided domain name and type.
+func (repo Postgres) FindRecords(ctx context.Context, name, rrType string) ([]ResourceRecord, error) {
+	rrs, err := repo.db.GetResourceRecords(ctx, sqlc.GetResourceRecordsParams{name, rrType})
 	if err != nil {
 		return nil, err
 	}
@@ -119,18 +144,17 @@ func (repo Postgres) FindRecords(name, rrType string) ([]ResourceRecord, error) 
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
 		resourceRecords = append(resourceRecords, ResourceRecord{
-			Domain:  record.Domain,
-			Type:    record.Type,
-			Class:   record.Class,
-			TypeID:  int(record.TypeID),
-			ClassID: int(record.ClassID),
-			TTL:     record.TimeToLive.Int32,
-			Data:    record.Data,
+			Domain: record.Domain,
+			Type:   record.Type,
+			Class:  record.Class,
+			TTL:    record.TimeToLive.Int32,
+			Data:   record.Data,
 		})
 	}
 	return resourceRecords, nil
 }
 
+// GetUser return user with provided login.
 func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
@@ -145,6 +169,7 @@ func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	}, nil
 }
 
+// GetAllUsers return all users from database.
 func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
 	usersRows, err := repo.db.GetAllUsers(context.Background())
 	if err != nil {
@@ -164,6 +189,7 @@ func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
+// UpdateUser update user with provided ID and values.
 func (repo Postgres) UpdateUser(ctx context.Context, user User) error {
 	return repo.db.UpdateUser(ctx, sqlc.UpdateUserParams{
 		ID:        int32(user.ID),
@@ -174,16 +200,17 @@ func (repo Postgres) UpdateUser(ctx context.Context, user User) error {
 	})
 }
 
-func (repo Postgres) AddUser(ctx context.Context, login, firstName, lastName, password, role string) (User, error) {
-	if len(firstName) < 2 {
+// AddUser add user in the database and return this user with settled ID.
+func (repo Postgres) AddUser(ctx context.Context, user User, password string) (User, error) {
+	if len(user.FirstName) < 2 {
 		return User{}, fmt.Errorf("can't use name %s, the length less than 2")
 	}
 
-	if len(lastName) < 2 {
+	if len(user.LastName) < 2 {
 		return User{}, fmt.Errorf("can't use last name %s, the length less than 2")
 	}
 
-	if len(role) < 4 {
+	if len(user.Role) < 4 {
 		return User{}, fmt.Errorf("length of role can't be less than 4")
 	}
 
@@ -200,26 +227,25 @@ func (repo Postgres) AddUser(ctx context.Context, login, firstName, lastName, pa
 		return User{}, fmt.Errorf("can't hash password: %w", err)
 	}
 
-	user, err := repo.db.CreateUser(ctx, sqlc.CreateUserParams{
-		Login:     login,
-		FirstName: firstName,
-		LastName:  lastName,
+	newUser, err := repo.db.CreateUser(ctx, sqlc.CreateUserParams{
+		Login:     user.Login,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
 		Password:  string(hash),
-		Role:      role,
 	})
 	if err != nil {
 		return User{}, fmt.Errorf("can't register new user: %w", err)
 	}
-	u, err := repo.db.GetUser(ctx, user.Login)
-	fmt.Println(u.Password)
 	return User{
-		Login:     u.Login,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		Role:      u.Role,
+		Login:     newUser.Login,
+		FirstName: newUser.FirstName,
+		LastName:  newUser.LastName,
+		Role:      newUser.Role,
 	}, nil
 }
 
+// CheckUserPassword check if the password is correct for provided user.
 func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
@@ -235,6 +261,7 @@ func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) 
 	}, bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(pass))
 }
 
+// DeleteUser delete user with provided id.
 func (repo Postgres) DeleteUser(ctx context.Context, id int32) error {
 	return repo.db.DeleteUser(ctx, id)
 }

@@ -1,3 +1,10 @@
+-- name: GetResourceRecordByID :one
+SELECT id , domain , data, type_id, class_id , time_to_live ,
+(SELECT type FROM types WHERE resource_records.type_id = types.id) AS type,
+(SELECT class FROM classes WHERE resource_records.class_id = classes.id) AS class  
+FROM resource_records
+WHERE resource_records.id = $1;
+
 -- name: GetResourceRecords :many
 SELECT id , domain , data, type_id, class_id , time_to_live ,
 (SELECT type FROM types WHERE resource_records.type_id = types.id) AS type,
@@ -37,6 +44,7 @@ DELETE FROM resource_records
 WHERE id = $1 ;
 
 -- name: CreateUser :one
+With ins as(
 INSERT INTO users (login, first_name, last_name,password,role_id)
 VALUES (
     $1,
@@ -45,7 +53,11 @@ VALUES (
     $4,
     (SELECT roles.id FROM roles WHERE roles.role = $5)
 )
-RETURNING *;
+RETURNING login, first_name, last_name, role_id
+) SELECT login, first_name, last_name, role
+FROM ins
+JOIN roles on ins.role_id = roles.ID;
+
 
 -- name: GetUser :one
 SELECT users.id, login, first_name, last_name, role, password

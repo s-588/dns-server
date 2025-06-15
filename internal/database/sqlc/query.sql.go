@@ -52,6 +52,7 @@ func (q *Queries) CreateResourceRecord(ctx context.Context, arg CreateResourceRe
 }
 
 const createUser = `-- name: CreateUser :one
+With ins as(
 INSERT INTO users (login, first_name, last_name,password,role_id)
 VALUES (
     $1,
@@ -60,7 +61,10 @@ VALUES (
     $4,
     (SELECT roles.id FROM roles WHERE roles.role = $5)
 )
-RETURNING id, login, first_name, last_name, password, role_id
+RETURNING login, first_name, last_name, role_id
+) SELECT login, first_name, last_name, role
+FROM ins
+JOIN roles on ins.role_id = roles.ID
 `
 
 type CreateUserParams struct {
@@ -71,7 +75,14 @@ type CreateUserParams struct {
 	Role      string `db:"role" json:"role"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+type CreateUserRow struct {
+	Login     string `db:"login" json:"login"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+	Role      string `db:"role" json:"role"`
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Login,
 		arg.FirstName,
@@ -79,14 +90,12 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.Password,
 		arg.Role,
 	)
-	var i User
+	var i CreateUserRow
 	err := row.Scan(
-		&i.ID,
 		&i.Login,
 		&i.FirstName,
 		&i.LastName,
-		&i.Password,
-		&i.RoleID,
+		&i.Role,
 	)
 	return i, err
 }
@@ -195,6 +204,41 @@ func (q *Queries) GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getResourceRecordByID = `-- name: GetResourceRecordByID :one
+SELECT id , domain , data, type_id, class_id , time_to_live ,
+(SELECT type FROM types WHERE resource_records.type_id = types.id) AS type,
+(SELECT class FROM classes WHERE resource_records.class_id = classes.id) AS class  
+FROM resource_records
+WHERE resource_records.id = $1
+`
+
+type GetResourceRecordByIDRow struct {
+	ID         int32       `db:"id" json:"id"`
+	Domain     string      `db:"domain" json:"domain"`
+	Data       string      `db:"data" json:"data"`
+	TypeID     int32       `db:"type_id" json:"type_id"`
+	ClassID    int32       `db:"class_id" json:"class_id"`
+	TimeToLive pgtype.Int4 `db:"time_to_live" json:"time_to_live"`
+	Type       string      `db:"type" json:"type"`
+	Class      string      `db:"class" json:"class"`
+}
+
+func (q *Queries) GetResourceRecordByID(ctx context.Context, id int32) (GetResourceRecordByIDRow, error) {
+	row := q.db.QueryRow(ctx, getResourceRecordByID, id)
+	var i GetResourceRecordByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Domain,
+		&i.Data,
+		&i.TypeID,
+		&i.ClassID,
+		&i.TimeToLive,
+		&i.Type,
+		&i.Class,
+	)
+	return i, err
 }
 
 const getResourceRecords = `-- name: GetResourceRecords :many
