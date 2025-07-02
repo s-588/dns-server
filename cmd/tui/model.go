@@ -1,41 +1,161 @@
 package tui
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
-	"time"
 
-	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	crud "github.com/prionis/dns-server/cmd/tui/CRUD"
-	"github.com/prionis/dns-server/cmd/tui/auth"
-	"github.com/prionis/dns-server/cmd/tui/popup"
-	"github.com/prionis/dns-server/cmd/tui/transport"
-	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
 	"golang.org/x/term"
+
+	"github.com/prionis/dns-server/cmd/tui/model/account"
+	"github.com/prionis/dns-server/cmd/tui/model/crud"
+	"github.com/prionis/dns-server/cmd/tui/model/export"
+	"github.com/prionis/dns-server/cmd/tui/model/filter"
+	"github.com/prionis/dns-server/cmd/tui/model/popup"
+	"github.com/prionis/dns-server/cmd/tui/model/sort"
+	"github.com/prionis/dns-server/cmd/tui/model/table"
+	"github.com/prionis/dns-server/cmd/tui/structs"
+	"github.com/prionis/dns-server/cmd/tui/transport"
 )
 
 const (
-	// Focus layers represent page user on
-	focusTabs = iota
-	focusButtons
-	focusTable
-	focusAddPage
-	focusDeletePage
-	focusUpdatePage
-	focusFilterPage
-	focusSortPage
-	focusLoginPage
-	focusRegister
-
 	// Minimum width and height of the screen to fit atleast one row in the tables
 	minWidth  = 52
 	minHeight = 22
 )
+
+const (
+	// Focus layers represent selected by user element
+	focusTabs = iota
+	focusButtons
+	focusTable
+	focusAddModel
+	focusDeleteModel
+	focusUpdateModel
+	focusFilterModel
+	focusSortModel
+	focusLoginModel
+	focusExportModel
+	focusSearch
+)
+
+var focusNames map[int]string = map[int]string{
+	focusTabs:        "tabs",
+	focusSearch:      "search",
+	focusButtons:     "buttons",
+	focusTable:       "table",
+	focusAddModel:    "add page",
+	focusDeleteModel: "delete page",
+	focusUpdateModel: "update page",
+	focusFilterModel: "filter page",
+	focusSortModel:   "sort page",
+	focusLoginModel:  "login page",
+	focusExportModel: "export page",
+}
+
+type keyMap struct {
+	Enter   key.Binding
+	Up      key.Binding
+	Down    key.Binding
+	Right   key.Binding
+	Left    key.Binding
+	Search  key.Binding
+	Sort    key.Binding
+	Filter  key.Binding
+	Refresh key.Binding
+	Reset   key.Binding
+	Add     key.Binding
+	Delete  key.Binding
+	Update  key.Binding
+	Help    key.Binding
+	Unfocus key.Binding
+	Quit    key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Help, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Down, k.Left, k.Right},
+		{k.Search, k.Sort, k.Filter},
+		{k.Reset, k.Refresh},
+		{k.Add, k.Delete, k.Update},
+		{k.Help, k.Enter, k.Unfocus, k.Quit},
+	}
+}
+
+var keys = keyMap{
+	Enter: key.NewBinding(
+		key.WithKeys("enter", "space"),
+		key.WithHelp("enter/space", "select item"),
+	),
+	Up: key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "move up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "move down"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("right", "l"),
+		key.WithHelp("←/h", "move right"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys("left", "h"),
+		key.WithHelp("→/l", "move left"),
+	),
+	Search: key.NewBinding(
+		key.WithKeys("/", "ctrl+f"),
+		key.WithHelp("ctrl+f or /", "search"),
+	),
+	Sort: key.NewBinding(
+		key.WithKeys("S"),
+		key.WithHelp("S", "sort"),
+	),
+	Filter: key.NewBinding(
+		key.WithKeys("F"),
+		key.WithHelp("F", "filter"),
+	),
+	Refresh: key.NewBinding(
+		key.WithKeys("F5", "ctrl+r"),
+		key.WithHelp("F5/ctrl+r", "refresh"),
+	),
+	Reset: key.NewBinding(
+		key.WithKeys("ctrl+z", "R"),
+		key.WithHelp("R/ctrl+z", "reset filtering"),
+	),
+	Add: key.NewBinding(
+		key.WithKeys("ctrl+n", "insert", "A"),
+		key.WithHelp("A/insert/ctrl+n", "add new"),
+	),
+	Delete: key.NewBinding(
+		key.WithKeys("delete", "backspace", "D", "ctrl+d"),
+		key.WithHelp("delete/backspace/D/ctrld+d", "delete"),
+	),
+	Update: key.NewBinding(
+		key.WithKeys("F2", "ctrl+s", "U"),
+		key.WithHelp("U/F2/ctrl+s", "update"),
+	),
+	Help: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "help"),
+	),
+	Unfocus: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "unfocus"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("ctrl+c", "Q"),
+		key.WithHelp("Q/ctrl+c", "quit"),
+	),
+}
 
 // This is the main model of the user interface.
 // It render all other buttons, tables and other models.
@@ -44,48 +164,36 @@ type model struct {
 	width int
 	// Height of the screen
 	height int
-
-	user *crudpb.User
+	user   *structs.User
 
 	// What element user use right now
 	focusLayer int
 	// Tabs for select table
-	tabs        []tab
+	tabs        []string
 	selectedTab int
 
-	loginPage auth.LoginModel
-
-	// Table that contain logs of the server.
-	logTable table.Model
-	// Table that contain resource records from the database.
-	rrTable table.Model
+	tables  []table.TableModel
+	logChan chan transport.LogMsg
 
 	// Model for popup notifications.
 	popup popup.PopupModel
 
-	// Model for deleting resource records from the database.
-	deleteModel crud.DeleteModel
+	loginPage account.LoginModel
 	// Model for adding resource records to the database.
 	addModel crud.AddModel
 	// Model for updating resource records of the database.
 	updatePage crud.UpdateModel
-	// Model for filtering rows of the table.
-	filterPage crud.FilterModel
-	// Model for sorting rows of the table.
-	sortPage crud.SortModel
+	// Model for deleting resource records from the database.
+	deletePage  crud.DeleteModel
+	searchInput textinput.Model
+	sortPage    sort.SortModel
+	filterPage  filter.FilterModel
+	exportModel export.ExportModel
 
-	// Pointer to the dabase connection.
+	keys keyMap
+	help help.Model
+
 	transport *transport.Transport
-}
-
-// Struct for representing tab on the top of the screen.
-type tab struct {
-	// Name of the tab.
-	name string
-	// Buttons for manipulation with tab data.
-	buttons []string
-	// Selected button.
-	cursor int
 }
 
 // Creating new model of the user interface.
@@ -99,151 +207,34 @@ func NewModel() (model, error) {
 			fmt.Errorf("Minimum size of the screen is %dx%d. Current is %dx%d",
 				minWidth, minHeight, w, h)
 	}
+	w, h = w-8, max(3, h-20)
 
-	t, err := transport.New("172.17.0.1:8083")
+	t, err := transport.New("172.31.155.196:8083")
 	if err != nil {
 		return model{}, fmt.Errorf("can't create http transport: %w", err)
 	}
 
-	rrTable, logTable := rrTable(t, w, h), logTable(w, h)
-	return model{
-		loginPage:  auth.NewLoginModel(t, w, h),
-		focusLayer: focusLoginPage,
+	searchInput := textinput.New()
+	searchInput.Prompt = fmt.Sprintf("%c  > ", '\uea6d')
+	searchInput.Placeholder = "Type here to search"
+	searchInput.ShowSuggestions = true
+	searchInput.Width = w / 3
 
-		width:  w,
-		height: h,
-		tabs: []tab{
-			{
-				name: "Logs",
-				buttons: []string{
-					fmt.Sprintf("View%c ", '\uebb7'),
-					fmt.Sprintf("Filter%c ", '\ueaf1'),
-					fmt.Sprintf("Sort%c ", '\ueaf1'),
-					fmt.Sprintf("Export to Word%c ", '\ue6a5'),
-					fmt.Sprintf("Export to Excel%c ", '\uf1c3'),
-				},
-			},
-			{
-				name: "Records",
-				buttons: []string{
-					fmt.Sprintf("View%c ", '\uebb7'),
-					fmt.Sprintf("Add%c ", '\uea60'),
-					fmt.Sprintf("Delete%c ", '\uf00d'),
-					fmt.Sprintf("Update%c ", '\uea73'),
-					fmt.Sprintf("Filter%c ", '\ueaf1'),
-					fmt.Sprintf("Sort%c ", '\ueaf1'),
-					fmt.Sprintf("Export to Word%c ", '\ue6a5'),
-					fmt.Sprintf("Export to Excel%c ", '\uf1c3'),
-				},
-			},
-		},
+	return model{
+		loginPage:   account.NewLoginModel(t, w, h),
+		focusLayer:  focusLoginModel,
+		exportModel: export.NewExportModel(t, w, h),
+		searchInput: searchInput,
+		help:        help.New(),
+
+		keys:      keys,
+		width:     w,
+		height:    h,
+		logChan:   make(chan transport.LogMsg, 1),
 		transport: t,
 
-		rrTable:  rrTable,
-		logTable: logTable,
-
-		popup:       popup.NewPopupModel(),
-		deleteModel: crud.NewDeleteModel(nil, t, w, h),
-		addModel:    crud.NewAddModel(t, w, h),
-		filterPage:  crud.NewFilterModel(nil, nil, w, h),
+		popup: popup.NewPopupModel(),
 	}, nil
-}
-
-// Create new table for the resource records and fill it with data from database.
-func rrTable(t *transport.Transport, w, h int) table.Model {
-	dbRRs, err := t.GetAllRRs()
-	if err != nil {
-		slog.Error("can't get records from database", "error", err)
-	}
-
-	cols := []table.Column{
-		{
-			Title: "ID",
-			Width: max(4, w/10-5),
-		},
-		{
-			Title: "Domain",
-			Width: max(8, w/10*3-5),
-		},
-		{
-			Title: "Data",
-			Width: max(10, w/10*3-5),
-		},
-		{
-			Title: "Type",
-			Width: max(5, w/10-5),
-		},
-		{
-			Title: "Class",
-			Width: max(2, w/10-5),
-		},
-		{
-			Title: "TimeToLive",
-			Width: max(6, w/10-5),
-		},
-	}
-	rows := make([]table.Row, 0, len(dbRRs))
-	for _, rr := range dbRRs {
-		rows = append(rows, table.Row{
-			strconv.FormatInt(rr.ID, 10),
-			rr.Domain,
-			rr.Data,
-			rr.Type,
-			rr.Class,
-			strconv.FormatInt(int64(rr.TTL), 10),
-		})
-	}
-	return table.New(
-		table.WithColumns(cols),
-		table.WithRows(rows),
-		table.WithHeight(max(3, h-20)),
-		table.WithWidth(w-8))
-}
-
-// Create new table for server logs and fill it with existing logs.
-func logTable(w, h int) table.Model {
-	rows := make([]table.Row, 0)
-	file, err := os.Open("DNSServer.log")
-	if err != nil {
-	}
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		log := make(map[string]any)
-		err := json.Unmarshal([]byte(line), &log)
-		if err != nil {
-			continue
-		}
-		t, err := time.Parse(time.RFC3339, log["time"].(string))
-		if err != nil {
-			t = time.Now()
-		}
-		rows = append(rows, table.Row{
-			t.Format(time.DateTime),
-			log["level"].(string),
-			log["msg"].(string),
-		})
-	}
-	cols := []table.Column{
-		{
-			Title: "Time",
-			Width: max(8, w/5-5),
-		},
-		{
-			Title: "Level",
-			Width: max(5, w/5-5),
-		},
-		{
-			Title: "Message",
-			Width: max(8, (w/5)*3-5),
-		},
-	}
-	return table.New(
-		table.WithColumns(cols),
-		table.WithRows(rows),
-		table.WithHeight(max(3, h-20)),
-		table.WithWidth(w-8),
-	)
 }
 
 // Exit point of the app.

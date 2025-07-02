@@ -31,8 +31,6 @@ CREATE TABLE users(
     first_name VARCHAR(20) NOT NULL,
     last_name VARCHAR(20) NOT NULL,
     password VARCHAR(72) NOT NULL,
-    role_id INTEGER,
+    role_id INTEGER NOT NULL,
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
-
-

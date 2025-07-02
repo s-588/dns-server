@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package crud.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "./crudpb";
 
 message User {
@@ -13,7 +15,9 @@ message User {
   string role = 6;
 }
 
-message UserCollection { repeated User users = 1; }
+message UserCollection {
+  repeated User users = 1;
+}
 
 message ResourceRecord {
   int32 id = 1;
@@ -24,7 +28,9 @@ message ResourceRecord {
   int32 time_to_live = 6;
 }
 
-message ResourceRecordCollection { repeated ResourceRecord records = 1; }
+message ResourceRecordCollection {
+  repeated ResourceRecord records = 1;
+}
 
 message Login {
   string username = 1;
@@ -37,4 +43,14 @@ message Register {
   string last_name = 3;
   string password = 4;
   string role = 5;
+}
+
+message Log {
+  google.protobuf.Timestamp time = 1;
+  string level = 2;
+  string msg = 3;
+}
+
+message LogCollection {
+  repeated Log logs = 1;
 }

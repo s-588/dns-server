@@ -20,7 +20,7 @@ VALUES (
     (SELECT id FROM classes WHERE class = $4),
     $5
 )
-RETURNING id, domain, data, type_id, class_id, time_to_live
+RETURNING id
 `
 
 type CreateResourceRecordParams struct {
@@ -31,7 +31,7 @@ type CreateResourceRecordParams struct {
 	TimeToLive pgtype.Int4 `db:"time_to_live" json:"time_to_live"`
 }
 
-func (q *Queries) CreateResourceRecord(ctx context.Context, arg CreateResourceRecordParams) (ResourceRecord, error) {
+func (q *Queries) CreateResourceRecord(ctx context.Context, arg CreateResourceRecordParams) (int32, error) {
 	row := q.db.QueryRow(ctx, createResourceRecord,
 		arg.Domain,
 		arg.Data,
@@ -39,20 +39,12 @@ func (q *Queries) CreateResourceRecord(ctx context.Context, arg CreateResourceRe
 		arg.Class,
 		arg.TimeToLive,
 	)
-	var i ResourceRecord
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.Data,
-		&i.TypeID,
-		&i.ClassID,
-		&i.TimeToLive,
-	)
-	return i, err
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createUser = `-- name: CreateUser :one
-With ins as(
 INSERT INTO users (login, first_name, last_name,password,role_id)
 VALUES (
     $1,
@@ -61,10 +53,7 @@ VALUES (
     $4,
     (SELECT roles.id FROM roles WHERE roles.role = $5)
 )
-RETURNING login, first_name, last_name, role_id
-) SELECT login, first_name, last_name, role
-FROM ins
-JOIN roles on ins.role_id = roles.ID
+RETURNING id
 `
 
 type CreateUserParams struct {
@@ -75,14 +64,7 @@ type CreateUserParams struct {
 	Role      string `db:"role" json:"role"`
 }
 
-type CreateUserRow struct {
-	Login     string `db:"login" json:"login"`
-	FirstName string `db:"first_name" json:"first_name"`
-	LastName  string `db:"last_name" json:"last_name"`
-	Role      string `db:"role" json:"role"`
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int32, error) {
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Login,
 		arg.FirstName,
@@ -90,14 +72,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.Password,
 		arg.Role,
 	)
-	var i CreateUserRow
-	err := row.Scan(
-		&i.Login,
-		&i.FirstName,
-		&i.LastName,
-		&i.Role,
-	)
-	return i, err
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteResourceRecord = `-- name: DeleteResourceRecord :exec
@@ -331,7 +308,7 @@ SET domain = $1,
     class_id = (SELECT id FROM classes WHERE class = $4),
     time_to_live = $5
 WHERE resource_records.id = $6
-RETURNING id, domain, data, type_id, class_id, time_to_live
+RETURNING id
 `
 
 type UpdateResourceRecordParams struct {
@@ -343,7 +320,7 @@ type UpdateResourceRecordParams struct {
 	ID         int32       `db:"id" json:"id"`
 }
 
-func (q *Queries) UpdateResourceRecord(ctx context.Context, arg UpdateResourceRecordParams) (ResourceRecord, error) {
+func (q *Queries) UpdateResourceRecord(ctx context.Context, arg UpdateResourceRecordParams) (int32, error) {
 	row := q.db.QueryRow(ctx, updateResourceRecord,
 		arg.Domain,
 		arg.Data,
@@ -352,21 +329,16 @@ func (q *Queries) UpdateResourceRecord(ctx context.Context, arg UpdateResourceRe
 		arg.TimeToLive,
 		arg.ID,
 	)
-	var i ResourceRecord
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.Data,
-		&i.TypeID,
-		&i.ClassID,
-		&i.TimeToLive,
-	)
-	return i, err
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const updateUser = `-- name: UpdateUser :exec
 UPDATE users
-SET login = $2, first_name = $3, last_name = $4, role_id = (SELECT id FROM roles WHERE role = $5)
+SET login = $2, first_name = $3, last_name = $4, 
+    role_id = (SELECT id FROM roles WHERE role = $5 AND role IS NOT NULL),
+    password = $6
 WHERE users.id = $1
 `
 
@@ -376,6 +348,7 @@ type UpdateUserParams struct {
 	FirstName string `db:"first_name" json:"first_name"`
 	LastName  string `db:"last_name" json:"last_name"`
 	Role      string `db:"role" json:"role"`
+	Password  string `db:"password" json:"password"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
@@ -385,6 +358,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
 		arg.FirstName,
 		arg.LastName,
 		arg.Role,
+		arg.Password,
 	)
 	return err
 }

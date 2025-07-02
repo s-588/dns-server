@@ -2,13 +2,28 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/prionis/dns-server/internal/database"
 )
+
+func (s Server) loggerMiddleware() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				s.logger.Info(fmt.Sprintf("%s %s from %s",
+					r.Method, r.URL.String(), r.RemoteAddr))
+			}()
+			next.ServeHTTP(w, r)
+		})
+		return http.HandlerFunc(fn)
+	}
+}
 
 func (s Server) timeoutMiddleware(t time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -29,7 +44,7 @@ func (s Server) timeoutMiddleware(t time.Duration) func(http.Handler) http.Handl
 	}
 }
 
-func (s Server) authorizationMiddleware(role string) func(next http.Handler) http.Handler {
+func (s Server) authorizationMiddleware(allowed []string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, ok := r.Context().Value("user").(database.User)
@@ -39,11 +54,12 @@ func (s Server) authorizationMiddleware(role string) func(next http.Handler) htt
 				return
 			}
 
-			if user.Role != role {
-				s.logger.Error("user " + user.Login + "don't have rights")
+			if !slices.Contains(allowed, user.Role) {
+				s.logger.Error("user " + user.Login + " don't have rights")
 				http.Error(w, "Not enough rights for this", http.StatusForbidden)
 				return
 			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -52,13 +68,20 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("jwt")
 		if err != nil {
-			s.logger.Error("getting cookie from request: " + err.Error())
+			s.logger.Error("getting jwt token cookie from request: " + err.Error())
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		token, err := jwt.Parse(cookie.String(), func(t *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SECRET")), nil
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			s.logger.Error("JWT_SECRET environment variable is not set")
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (interface{}, error) {
+			return []byte(secret), nil
 		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 		if err != nil {
 			s.logger.Error("can't parse JWT token: " + err.Error())
@@ -73,9 +96,8 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		userID := claims["uuid"].(string)
-		// TODO: add caching
-		user, err := s.db.GetUser(context.Background(), userID)
+		login := claims["login"].(string)
+		user, err := s.db.GetUser(context.Background(), login)
 		if err != nil {
 			s.logger.Error("can't retrive user from database: " + err.Error())
 			http.Error(w, "Internal error, try later", http.StatusInternalServerError)
@@ -83,5 +105,6 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 		}
 
 		r = r.WithContext(context.WithValue(r.Context(), "user", user))
+		next.ServeHTTP(w, r)
 	})
 }

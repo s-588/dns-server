@@ -27,7 +27,7 @@ VALUES (
     (SELECT id FROM classes WHERE class = $4),
     $5
 )
-RETURNING *;
+RETURNING id;
 
 -- name: UpdateResourceRecord :one
 UPDATE resource_records
@@ -37,14 +37,13 @@ SET domain = $1,
     class_id = (SELECT id FROM classes WHERE class = $4),
     time_to_live = $5
 WHERE resource_records.id = $6
-RETURNING *;
+RETURNING id;
 
 -- name: DeleteResourceRecord :exec
 DELETE FROM resource_records
 WHERE id = $1 ;
 
 -- name: CreateUser :one
-With ins as(
 INSERT INTO users (login, first_name, last_name,password,role_id)
 VALUES (
     $1,
@@ -53,10 +52,7 @@ VALUES (
     $4,
     (SELECT roles.id FROM roles WHERE roles.role = $5)
 )
-RETURNING login, first_name, last_name, role_id
-) SELECT login, first_name, last_name, role
-FROM ins
-JOIN roles on ins.role_id = roles.ID;
+RETURNING id ;
 
 
 -- name: GetUser :one
@@ -74,5 +70,7 @@ WHERE users.id = $1;
 
 -- name: UpdateUser :exec
 UPDATE users
-SET login = $2, first_name = $3, last_name = $4, role_id = (SELECT id FROM roles WHERE role = $5)
+SET login = $2, first_name = $3, last_name = $4, 
+    role_id = (SELECT id FROM roles WHERE role = $5 AND role IS NOT NULL),
+    password = $6
 WHERE users.id = $1;

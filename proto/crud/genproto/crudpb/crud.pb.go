@@ -9,6 +9,7 @@ package crudpb
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -405,12 +406,116 @@ func (x *Register) GetRole() string {
 	return ""
 }
 
+type Log struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Time          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	Level         string                 `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
+	Msg           string                 `protobuf:"bytes,3,opt,name=msg,proto3" json:"msg,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Log) Reset() {
+	*x = Log{}
+	mi := &file_crud_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Log) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Log) ProtoMessage() {}
+
+func (x *Log) ProtoReflect() protoreflect.Message {
+	mi := &file_crud_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Log.ProtoReflect.Descriptor instead.
+func (*Log) Descriptor() ([]byte, []int) {
+	return file_crud_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *Log) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *Log) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *Log) GetMsg() string {
+	if x != nil {
+		return x.Msg
+	}
+	return ""
+}
+
+type LogCollection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Logs          []*Log                 `protobuf:"bytes,1,rep,name=logs,proto3" json:"logs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogCollection) Reset() {
+	*x = LogCollection{}
+	mi := &file_crud_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogCollection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogCollection) ProtoMessage() {}
+
+func (x *LogCollection) ProtoReflect() protoreflect.Message {
+	mi := &file_crud_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogCollection.ProtoReflect.Descriptor instead.
+func (*LogCollection) Descriptor() ([]byte, []int) {
+	return file_crud_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *LogCollection) GetLogs() []*Log {
+	if x != nil {
+		return x.Logs
+	}
+	return nil
+}
+
 var File_crud_proto protoreflect.FileDescriptor
 
 const file_crud_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"crud.proto\x12\acrud.v1\"\x98\x01\n" +
+	"crud.proto\x12\acrud.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x98\x01\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
 	"\x05login\x18\x02 \x01(\tR\x05login\x12\x1d\n" +
@@ -440,7 +545,13 @@ const file_crud_proto_rawDesc = "" +
 	"first_name\x18\x02 \x01(\tR\tfirstName\x12\x1b\n" +
 	"\tlast_name\x18\x03 \x01(\tR\blastName\x12\x1a\n" +
 	"\bpassword\x18\x04 \x01(\tR\bpassword\x12\x12\n" +
-	"\x04role\x18\x05 \x01(\tR\x04roleB\n" +
+	"\x04role\x18\x05 \x01(\tR\x04role\"]\n" +
+	"\x03Log\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\tR\x05level\x12\x10\n" +
+	"\x03msg\x18\x03 \x01(\tR\x03msg\"1\n" +
+	"\rLogCollection\x12 \n" +
+	"\x04logs\x18\x01 \x03(\v2\f.crud.v1.LogR\x04logsB\n" +
 	"Z\b./crudpbb\x06proto3"
 
 var (
@@ -455,7 +566,7 @@ func file_crud_proto_rawDescGZIP() []byte {
 	return file_crud_proto_rawDescData
 }
 
-var file_crud_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_crud_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_crud_proto_goTypes = []any{
 	(*User)(nil),                     // 0: crud.v1.User
 	(*UserCollection)(nil),           // 1: crud.v1.UserCollection
@@ -463,15 +574,20 @@ var file_crud_proto_goTypes = []any{
 	(*ResourceRecordCollection)(nil), // 3: crud.v1.ResourceRecordCollection
 	(*Login)(nil),                    // 4: crud.v1.Login
 	(*Register)(nil),                 // 5: crud.v1.Register
+	(*Log)(nil),                      // 6: crud.v1.Log
+	(*LogCollection)(nil),            // 7: crud.v1.LogCollection
+	(*timestamppb.Timestamp)(nil),    // 8: google.protobuf.Timestamp
 }
 var file_crud_proto_depIdxs = []int32{
 	0, // 0: crud.v1.UserCollection.users:type_name -> crud.v1.User
 	2, // 1: crud.v1.ResourceRecordCollection.records:type_name -> crud.v1.ResourceRecord
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	8, // 2: crud.v1.Log.time:type_name -> google.protobuf.Timestamp
+	6, // 3: crud.v1.LogCollection.logs:type_name -> crud.v1.Log
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_crud_proto_init() }
@@ -485,7 +601,7 @@ func file_crud_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_crud_proto_rawDesc), len(file_crud_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

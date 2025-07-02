@@ -33,10 +33,10 @@ type Type struct {
 }
 
 type User struct {
-	ID        int32       `db:"id" json:"id"`
-	Login     string      `db:"login" json:"login"`
-	FirstName string      `db:"first_name" json:"first_name"`
-	LastName  string      `db:"last_name" json:"last_name"`
-	Password  string      `db:"password" json:"password"`
-	RoleID    pgtype.Int4 `db:"role_id" json:"role_id"`
+	ID        int32  `db:"id" json:"id"`
+	Login     string `db:"login" json:"login"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+	Password  string `db:"password" json:"password"`
+	RoleID    int32  `db:"role_id" json:"role_id"`
 }

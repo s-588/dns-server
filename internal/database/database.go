@@ -5,7 +5,7 @@ import "context"
 // Repository interface represent database.
 type Repository interface {
 	// AddRecord add resource record to the database and return this resource record with inserted ID.
-	AddRecord(ctx context.Context, rr ResourceRecord) (ResourceRecord, error)
+	AddRecord(ctx context.Context, rr ResourceRecord) (int32, error)
 	// GetAllRecords return all resource records that database contain.
 	GetAllRecords(ctx context.Context) ([]ResourceRecord, error)
 	// GetRecord return one resource record with provided ID.
@@ -20,16 +20,16 @@ type Repository interface {
 	DeleteRecord(ctx context.Context, id int32) error
 	// GetAllUsers return all users from database.
 	GetAllUsers(ctx context.Context) ([]User, error)
-	// GetUser return user with provided id.
-	GetUser(ctx context.Context, id string) (User, error)
+	// GetUser return user with provided login.
+	GetUser(ctx context.Context, login string) (User, error)
 	// CheckUserPassword check if the password is correct for user with provided login.
 	CheckUserPassword(ctx context.Context, login, pass string) (User, error)
 	// AddUser add user to the database. Return this user with seted ID.
-	AddUser(ctx context.Context, user User, password string) (User, error)
+	AddUser(ctx context.Context, user User, password string) (int32, error)
 	// DeleteUser delete user with provided ID.
 	DeleteUser(ctx context.Context, id int32) error
 	// UpdateUser update user with provided ID and values from the struct.
-	UpdateUser(ctx context.Context, user User) error
+	UpdateUser(ctx context.Context, user User, password string) error
 }
 
 // ResourceRecord structure represent resource record in the dabase.

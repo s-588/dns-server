@@ -2,10 +2,8 @@ package database
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -39,9 +37,10 @@ func NewPostgres(connString string) (Postgres, error) {
 
 // GetConnectionString return the formated connection string for connecting to the PostgreSQL.
 func GetConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@postgres:5432/%s?sslmode=disable",
+	return fmt.Sprintf("postgresql://%s:%s@%s:5432/%s?sslmode=disable",
 		os.Getenv("POSTGRES_USER"),
 		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_ADDR"),
 		os.Getenv("POSTGRES_DB"))
 }
 
@@ -62,8 +61,8 @@ func (repo Postgres) GetRecord(ctx context.Context, id int32) (ResourceRecord, e
 }
 
 // AddRecord insert record in the database and return this record with ID settled ID.
-func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (ResourceRecord, error) {
-	newRR, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
+func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (int32, error) {
+	id, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
 		Domain:     rr.Domain,
 		Type:       rr.Type,
 		Class:      rr.Class,
@@ -71,16 +70,9 @@ func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (Resource
 		TimeToLive: pgtype.Int4{int32(rr.TTL), true},
 	})
 	if err != nil {
-		return ResourceRecord{}, err
+		return 0, err
 	}
-	return ResourceRecord{
-		ID:     newRR.ID,
-		Domain: newRR.Domain,
-		Type:   rr.Type,
-		Class:  rr.Class,
-		Data:   newRR.Data,
-		TTL:    newRR.TimeToLive.Int32,
-	}, nil
+	return id, nil
 }
 
 // GetAllRecords return all the resource records from the database
@@ -100,9 +92,6 @@ func (repo Postgres) GetAllRecords(ctx context.Context) ([]ResourceRecord, error
 			TTL:    record.TimeToLive.Int32,
 			Data:   record.Data,
 		})
-	}
-	if len(resourceRecords) <= 0 {
-		return resourceRecords, errors.New("not found")
 	}
 	return resourceRecords, nil
 }
@@ -162,6 +151,7 @@ func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	}
 
 	return User{
+		ID:        user.ID,
 		Login:     user.Login,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
@@ -190,44 +180,50 @@ func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
 }
 
 // UpdateUser update user with provided ID and values.
-func (repo Postgres) UpdateUser(ctx context.Context, user User) error {
+func (repo Postgres) UpdateUser(ctx context.Context, user User, password string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return fmt.Errorf("can't hash password: %w", err)
+	}
+
 	return repo.db.UpdateUser(ctx, sqlc.UpdateUserParams{
 		ID:        int32(user.ID),
 		Login:     user.Login,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
 		Role:      user.Role,
+		Password:  string(hash),
 	})
 }
 
 // AddUser add user in the database and return this user with settled ID.
-func (repo Postgres) AddUser(ctx context.Context, user User, password string) (User, error) {
+func (repo Postgres) AddUser(ctx context.Context, user User, password string) (int32, error) {
 	if len(user.FirstName) < 2 {
-		return User{}, fmt.Errorf("can't use name %s, the length less than 2")
+		return 0, fmt.Errorf("can't use name %s, the length less than 2")
 	}
 
 	if len(user.LastName) < 2 {
-		return User{}, fmt.Errorf("can't use last name %s, the length less than 2")
+		return 0, fmt.Errorf("can't use last name %s, the length less than 2")
 	}
 
 	if len(user.Role) < 4 {
-		return User{}, fmt.Errorf("length of role can't be less than 4")
+		return 0, fmt.Errorf("length of role can't be less than 4")
 	}
 
-	if !strings.ContainsAny(password, "+[{(&=)}]*!$|1234567890") && len(password) < 8 {
-		return User{}, fmt.Errorf("password is too weak, it must contain at least " +
+	if len(password) < 4 {
+		return 0, fmt.Errorf("password is too weak, it must contain at least " +
 			"1 special symbol and 1 number and 8 symbols in total")
 	}
 	if len(password) > 71 {
-		return User{}, fmt.Errorf("password is too long, 70 symbols max")
+		return 0, fmt.Errorf("password is too long, 70 symbols max")
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {
-		return User{}, fmt.Errorf("can't hash password: %w", err)
+		return 0, fmt.Errorf("can't hash password: %w", err)
 	}
 
-	newUser, err := repo.db.CreateUser(ctx, sqlc.CreateUserParams{
+	id, err := repo.db.CreateUser(ctx, sqlc.CreateUserParams{
 		Login:     user.Login,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
@@ -235,14 +231,9 @@ func (repo Postgres) AddUser(ctx context.Context, user User, password string) (U
 		Password:  string(hash),
 	})
 	if err != nil {
-		return User{}, fmt.Errorf("can't register new user: %w", err)
+		return 0, fmt.Errorf("can't register new user: %w", err)
 	}
-	return User{
-		Login:     newUser.Login,
-		FirstName: newUser.FirstName,
-		LastName:  newUser.LastName,
-		Role:      newUser.Role,
-	}, nil
+	return id, nil
 }
 
 // CheckUserPassword check if the password is correct for provided user.

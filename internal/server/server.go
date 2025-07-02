@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -9,10 +11,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gorilla/websocket"
 	"github.com/miekg/dns"
 
 	"github.com/prionis/dns-server/internal/database"
+)
+
+var (
+	adminRights = []string{"admin"}
+	userRights  = []string{"user", "admin"}
 )
 
 type Server struct {
@@ -20,7 +26,6 @@ type Server struct {
 	httpPort string
 	logger   Logger
 	db       database.Repository
-	wsConns  []*websocket.Conn
 }
 
 func NewServer(opts ...Option) (Server, error) {
@@ -44,13 +49,30 @@ func NewServer(opts ...Option) (Server, error) {
 	return s, nil
 }
 
-func (s Server) Start() error {
+func (s Server) Start(ws *WebSocket) error {
+	_, err := s.db.GetUser(context.Background(), "admin")
+	if err != nil {
+		user, err := s.db.AddUser(context.Background(), database.User{
+			Login:     "admin",
+			FirstName: "John",
+			LastName:  "Doe",
+			Role:      "admin",
+		}, "admin")
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("Can't create new user: %s", err.Error()))
+		} else {
+			s.logger.Info(fmt.Sprintf("New admin was created: %v", user))
+		}
+	} else {
+		s.logger.Info("admin user exists")
+	}
+
 	dns.HandleFunc(".", s.dnsHandler)
 
 	go s.serveDNS("udp")
 	go s.serveDNS("tcp")
 
-	go s.serveHTTP()
+	go s.serveHTTP(ws)
 
 	s.logger.Info("server listen DNS requests on " + s.dnsPort)
 	signals := make(chan os.Signal)
@@ -60,8 +82,9 @@ func (s Server) Start() error {
 	return nil
 }
 
-func (s Server) serveHTTP() {
+func (s Server) serveHTTP(ws *WebSocket) {
 	router := chi.NewRouter()
+	router.Use(s.loggerMiddleware())
 
 	router.Route("/auth", func(r chi.Router) {
 		r.Use(s.timeoutMiddleware(10 * time.Second))
@@ -70,7 +93,10 @@ func (s Server) serveHTTP() {
 	})
 
 	router.Route("/api", func(r chi.Router) {
+		r.Use(s.authenticationMiddleware)
+
 		r.Route("/users", func(r chi.Router) {
+			r.Use(s.authorizationMiddleware(adminRights))
 			r.Get("/all", s.getAllUsersHandler)
 			r.Get("/{id}", s.getUserHandler)
 			r.Delete("/", s.deleteUserHandler)
@@ -78,6 +104,7 @@ func (s Server) serveHTTP() {
 		})
 
 		r.Route("/rrs", func(r chi.Router) {
+			r.Use(s.authorizationMiddleware(userRights))
 			r.Get("/all", s.getAllRecordsHandler)
 			r.Get("/{id}", s.getRecordHandler)
 			r.Delete("/{id}", s.deleteRRHandler)
@@ -86,9 +113,9 @@ func (s Server) serveHTTP() {
 		})
 
 		r.Route("/logs", func(r chi.Router) {
-			r.Use(s.authenticationMiddleware)
-			r.Use(s.authorizationMiddleware("user"))
-			r.HandleFunc("/", s.websocketHandler)
+			r.Use(s.authorizationMiddleware(userRights))
+			r.HandleFunc("/all", s.getAllLogsHandler)
+			r.HandleFunc("/ws", s.websocketHandler(ws))
 		})
 	})
 

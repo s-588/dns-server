@@ -94,25 +94,22 @@ var (
 // }
 
 func StartServer() {
-	// sock, err := tui.NewUISocket()
-	// if err != nil {
-	// 	printError("can't create socket\n" + err.Error())
-	// 	return
-	// }
-	//
+	server.LoadEnvs()
 	logFile, err := os.OpenFile("DNSServer.log", os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		printError("can't open log file\n" + err.Error())
 		return
 	}
 
-	writer := io.MultiWriter(logFile, os.Stdout)
+	ws := server.NewWSWriter()
+	writer := io.MultiWriter(logFile, os.Stdout, ws)
 	logger := slog.New(slog.NewJSONHandler(writer, nil))
 	slog.SetDefault(logger)
 
+	slog.Info("connecting to database")
 	db, err := database.NewPostgres("")
 	if err != nil {
-		fmt.Println("can't connect to database\n" + err.Error())
+		printError("can't connect to database\n" + err.Error())
 		return
 	}
 	logger.Info("connection with database established")
@@ -129,7 +126,7 @@ func StartServer() {
 	logger.Info("server created")
 
 	logger.Info("starting server")
-	if err := s.Start(); err != nil {
+	if err := s.Start(ws); err != nil {
 		printError(fmt.Sprintf("can't start server\n%s", err.Error()))
 	}
 }

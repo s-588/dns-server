@@ -1,4 +1,4 @@
-package models
+package crud
 
 import (
 	"fmt"
@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/prionis/dns-server/cmd/tui/popup"
+	"github.com/prionis/dns-server/cmd/tui/model/popup"
+	"github.com/prionis/dns-server/cmd/tui/model/table"
 	"github.com/prionis/dns-server/cmd/tui/style"
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )
@@ -19,7 +19,7 @@ type DeleteModel struct {
 	// Width and height of the screen
 	width, height int
 	// Row containing the record user want to delete.
-	Record table.Row
+	table *table.TableModel
 
 	// "Yes" and "No" buttons to accept or reject delete.
 	buttons []string
@@ -31,13 +31,12 @@ type DeleteModel struct {
 }
 
 // Create new delete model.
-func NewDeleteModel(record table.Row, t *transport.Transport, w, h int) DeleteModel {
+func NewDeleteModel(table *table.TableModel, t *transport.Transport, w int) DeleteModel {
 	return DeleteModel{
-		Record:    record,
+		table:     table,
 		buttons:   []string{"Yes", "No"},
 		transport: t,
 		width:     w,
-		height:    h,
 	}
 }
 
@@ -61,7 +60,7 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", " ":
 			// Button "Yes" is pressed
 			if d.cursor == 0 {
-				id, err := parseRecordID(d.Record)
+				id, err := strconv.ParseInt(d.table.Table.SelectedRow()[0], 10, 32)
 				if err != nil {
 					return d, func() tea.Msg {
 						return popup.PopupMsg{
@@ -71,7 +70,7 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
-				return d, func() tea.Msg { return DeleteMsg{id: id} }
+				return d, func() tea.Msg { return DeleteMsg{id: int32(id)} }
 			}
 
 			return d, tea.Batch(func() tea.Msg {
@@ -117,7 +116,7 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // Delete record from database.
-func (d DeleteModel) delete(id int64) error {
+func (d DeleteModel) delete(id int32) error {
 	err := d.transport.DeleteRR(id)
 	if err != nil {
 		return fmt.Errorf("can't delete from database: %w", err)
@@ -125,20 +124,9 @@ func (d DeleteModel) delete(id int64) error {
 	return nil
 }
 
-func parseRecordID(r table.Row) (int64, error) {
-	id := r[0]
-	return strconv.ParseInt(id, 10, 64)
-}
-
 func (d DeleteModel) View() string {
 	s := strings.Builder{}
 	s.WriteString(style.HeaderStyle.Render("Confirm Deletion"))
-	s.WriteString("\n\n")
-	recordDetails := fmt.Sprintf(
-		"ID: %s\nDomain: %s\nData: %s\nType: %s\nClass: %s\nTTL: %s",
-		d.Record[0], d.Record[1], d.Record[2], d.Record[3], d.Record[4], d.Record[5],
-	)
-	s.WriteString(style.BaseStyle.Render(recordDetails))
 	s.WriteString("\n\n")
 	styledButtons := make([]string, len(d.buttons))
 	for i, btn := range d.buttons {
@@ -154,12 +142,12 @@ func (d DeleteModel) View() string {
 }
 
 type DeleteMsg struct {
-	id      int64
+	id      int32
 	confirm bool
 }
 
 type DeleteSuccessMsg struct {
-	Id int64
+	Id int32
 }
 
 type DeleteCancelMsg struct{}

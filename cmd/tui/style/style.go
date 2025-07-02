@@ -10,12 +10,20 @@ var (
 	PinkColor   = lipgloss.Color("#ff87d7")
 	RedColor    = lipgloss.Color("#e64553")
 
+	BaseBorderWithPaddingsStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(PurpleColor).
+					Padding(1, 2) // padding inside the border
+
 	BaseBorderStyle = lipgloss.NewStyle().
+			Padding(0, 0, 0, 0).
+			Margin(0, 0, 0, 0).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(PurpleColor).
-			Padding(1, 2) // padding inside the border
+			BorderForeground(PurpleColor)
 
 	UnselectedBoarderStyle = lipgloss.NewStyle().
+				Padding(0, 0, 0, 0).
+				Margin(0, 0, 0, 0).
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(PinkColor)
 
@@ -59,6 +67,6 @@ var (
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("#1e66f5"))
 
-	FocusedInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	BlurredInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	FocusedInputStyle = lipgloss.NewStyle().Foreground(PurpleColor)
+	BlurredInputStyle = lipgloss.NewStyle().Foreground(PinkColor)
 )

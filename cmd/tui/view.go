@@ -1,10 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/prionis/dns-server/cmd/tui/style"
 )
@@ -13,7 +11,7 @@ import (
 func (m model) View() string {
 	raw := m.rawView()
 	// Ensure the outer border respects the full terminal height
-	return style.BaseBorderStyle.Height(m.height - 2).Width(m.width - 2).Render(raw)
+	return style.BaseBorderWithPaddingsStyle.Height(m.height - 2).Width(m.width - 2).Render(raw)
 }
 
 // Render fill of the interface
@@ -21,93 +19,83 @@ func (m model) View() string {
 func (m model) rawView() string {
 	s := strings.Builder{}
 
-	var table *table.Model
-	switch m.selectedTab {
-	case 0:
-		table = &m.logTable
-	case 1:
-		table = &m.rrTable
-	}
-
 	s.WriteString(style.HeaderStyle.Width(m.width - 6).Render("DNS Server Dashboard"))
 	s.WriteString("\n\n")
 
 	switch m.focusLayer {
-	case focusLoginPage:
-		return m.loginPage.View()
-	case focusUpdatePage:
-		s.WriteString(m.updatePage.View())
-
-	case focusSortPage:
-		s.WriteString(m.sortPage.View())
-
-	case focusDeletePage:
-		s.WriteString(m.deleteModel.View())
-
-	case focusAddPage:
-		s.WriteString(m.addModel.View())
-
-	case focusFilterPage:
-		s.WriteString(m.filterPage.View())
-
-	default:
-
-		tabs := make([]string, len(m.tabs))
+	case focusTabs, focusSearch, focusTable, focusButtons:
+		styledButtons := make([]string, len(m.tabs))
 		for i, tab := range m.tabs {
 			if m.selectedTab == i {
 				if m.focusLayer == focusTabs {
-					tabs[i] = style.SelectedButtonStyle.Render(tab.name)
+					styledButtons[i] = style.SelectedButtonStyle.Underline(true).Render(tab)
 				} else {
-					tabs[i] = style.SecondarySelectedButtonStyle.Render(tab.name)
+					styledButtons[i] = style.SecondarySelectedButtonStyle.Render(tab)
 				}
 			} else {
-				tabs[i] = style.ButtonStyle.Render(tab.name)
+				styledButtons[i] = style.ButtonStyle.Render(tab)
 			}
 		}
-		buttonsAlignCenter := lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
-		s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, tabs...)))
-		s.WriteString("\n\n")
 
-		buttons := make([]string, len(m.tabs[m.selectedTab].buttons))
-		for i, btn := range m.tabs[m.selectedTab].buttons {
-			if m.tabs[m.selectedTab].cursor == i {
-				if m.focusLayer == focusButtons {
-					buttons[i] = style.SelectedButtonStyle.Render(btn)
-				} else {
-					buttons[i] = style.SecondarySelectedButtonStyle.Render(btn)
-				}
+		buttonsAlignCenter := lipgloss.NewStyle().Width(m.width - 4).Align(lipgloss.Center)
+		s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, styledButtons...)))
+		s.WriteString("\n")
+	}
+
+	switch m.focusLayer {
+	case focusExportModel:
+		s.WriteString(m.exportModel.View())
+
+	case focusLoginModel:
+		s.WriteString(m.loginPage.View())
+
+	case focusUpdateModel:
+		s.WriteString(m.updatePage.View())
+
+	case focusSortModel:
+		s.WriteString(m.sortPage.View())
+
+	case focusDeleteModel:
+		s.WriteString(m.deletePage.View())
+
+	case focusAddModel:
+		s.WriteString(m.addModel.View())
+
+	case focusFilterModel:
+		s.WriteString(m.filterPage.View())
+
+	case focusButtons, focusSearch, focusTabs, focusTable:
+		if m.selectedTab <= 2 {
+			if m.focusLayer == focusSearch {
+				s.WriteString(lipgloss.NewStyle().Width(m.width - 4).Align(lipgloss.Center).
+					Render(
+						style.BaseBorderStyle.Width((m.width - 4) / 3).Render(
+							style.FocusedInputStyle.Render(m.searchInput.View()),
+						),
+					),
+				)
 			} else {
-				buttons[i] = style.ButtonStyle.Render(btn)
+				s.WriteString(lipgloss.NewStyle().Width(m.width - 4).Align(lipgloss.Center).
+					Render(
+						style.UnselectedBoarderStyle.Width((m.width - 4) / 3).Render(
+							style.BlurredInputStyle.Render(m.searchInput.View()),
+						),
+					),
+				)
 			}
-		}
-		buttonsAlignCenter = lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center)
-		s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, buttons...)))
-		s.WriteString("\n\n")
+			s.WriteString("\n")
 
-		if table.Focused() {
-			s.WriteString(style.SelectedBoarderStyle.Render(table.View()))
-		} else {
-			s.WriteString(style.UnselectedBoarderStyle.Render(table.View()))
+			s.WriteString(m.tables[m.selectedTab].View())
 		}
 	}
 
-	s.WriteString("\n\n")
+	s.WriteString("\n")
 	s.WriteString(m.popup.View())
 
-	help := fmt.Sprintf(
-		"Need help? Press ? for full instructions."+
-			"Press Esc to exit. Use %c /%c  and %c /%c  to navigate. "+
-			"Press Enter to confirm your choice.",
-		'\uea9b', '\uea9c', '\ueaa1', '\uea9a',
-	)
-	switch m.focusLayer {
-	case focusTable:
-		if m.selectedTab == 1 {
-			help += " Press D to delete record. Press A to add record. " +
-				"Press / to find record. Press F to filter."
-		}
-	}
-	s.WriteString(style.FooterStyle.Render(help))
+	s.WriteString("\n")
+	s.WriteString(style.FooterStyle.Render("Curently selected: " + focusNames[m.focusLayer]))
+	s.WriteString("\n")
+	s.WriteString(m.help.View(m.keys))
 
 	return s.String()
 }

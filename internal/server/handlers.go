@@ -1,20 +1,27 @@
 package server
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/miekg/dns"
 	"github.com/prionis/dns-server/internal/database"
 	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // dnsHandler it is the tcp/udp handler for dns questions.
@@ -77,11 +84,27 @@ func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := s.db.CheckUserPassword(r.Context(), credentials.Username, credentials.Password)
 	if err != nil {
 		s.logger.Error("invalid login attempt for user " + credentials.GetUsername() + ": " + err.Error())
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+
+		var pgErr *pgconn.PgError
+		var errStr string
+		if errors.As(err, &pgErr) {
+			errStr = "User not found"
+			http.Error(w, errStr, http.StatusForbidden)
+			return
+		}
+
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			errStr = "Incorrect password"
+			http.Error(w, errStr, http.StatusForbidden)
+			return
+		}
+
+		http.Error(w, "Something went wrong", http.StatusInternalServerError)
 		return
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":         user.ID,
 		"login":      user.Login,
 		"role":       user.Role,
 		"first_name": user.FirstName,
@@ -105,6 +128,7 @@ func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	cookie := http.Cookie{
 		Name:     "jwt",
 		Value:    tokenString,
+		Path:     "/",
 		HttpOnly: true,
 		MaxAge:   14 * 24 * 60 * 60,
 		SameSite: http.SameSiteStrictMode,
@@ -152,7 +176,7 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.db.AddUser(r.Context(),
+	id, err := s.db.AddUser(r.Context(),
 		database.User{
 			Login:     credentials.Login,
 			FirstName: credentials.FirstName,
@@ -160,18 +184,33 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 			Role:      credentials.Role,
 		}, credentials.Password)
 	if err != nil {
-		s.logger.Error("can't register new user: " +
-			credentials.GetFirstName() + " " +
-			credentials.GetLastName())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		s.logger.Error("can't register new user " +
+			credentials.Login + ": " +
+			err.Error())
+		var pgErr *pgconn.PgError
+		var errStr string
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23502", "23503": // not_null_violation
+				errStr = "Uknown role"
+
+			case "23505": // unique_violation
+				errStr = "Already exist"
+
+			default:
+				errStr = "Can't update user"
+			}
+		}
+		http.Error(w, errStr, http.StatusInternalServerError)
 		return
 	}
 
 	u := &crudpb.User{
-		Login:     user.Login,
-		FirstName: user.FirstName,
-		LastName:  user.LastName,
-		Role:      user.Role,
+		Id:        id,
+		Login:     credentials.Login,
+		FirstName: credentials.FirstName,
+		LastName:  credentials.LastName,
+		Role:      credentials.Role,
 	}
 	b, err := proto.Marshal(u)
 
@@ -179,7 +218,7 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/protobuf")
 	w.Write(b)
 	s.logger.Info(fmt.Sprintf("Register new user: %s %s %s(%s)",
-		user.Role, user.FirstName, user.LastName, user.Login))
+		credentials.Role, credentials.FirstName, credentials.LastName, credentials.Login))
 }
 
 // getRecordHandler handle get request for resource records.
@@ -226,7 +265,7 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	rrs, err := s.db.GetAllRecords(r.Context())
 	if err != nil {
-		s.logger.Error("can't get records form databas: " + err.Error())
+		s.logger.Error("can't get records from databas: " + err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -309,7 +348,7 @@ func (s Server) getAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := proto.Marshal(u)
 	if err != nil {
-		s.logger.Error("can't get records form databas: " + err.Error())
+		s.logger.Error("can't get records from databas: " + err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -322,17 +361,19 @@ func (s Server) getAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // websocketHandler handle websocket connection for logs.
-func (s Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.Upgrader{}
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		s.logger.Error("can't upgrade connection " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
+func (s Server) websocketHandler(ws *WebSocket) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			s.logger.Error("can't upgrade connection " + err.Error())
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	s.wsConns = append(s.wsConns, conn)
-	s.logger.Info("new websocket connection with " + conn.RemoteAddr().String() + "established")
+		ws.AddConn(conn)
+		s.logger.Info("new websocket connection with " + conn.RemoteAddr().String() + "established")
+	}
 }
 
 // deleteUserHandler handle delete request of users.
@@ -393,10 +434,24 @@ func (s Server) patchUserHandler(w http.ResponseWriter, r *http.Request) {
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
 		Role:      user.Role,
-	})
+	}, user.Password)
 	if err != nil {
 		s.logger.Error("can't update user: " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		var pgErr *pgconn.PgError
+		var errStr string
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23502", "23503": // not_null_violation
+				errStr = "Uknown role"
+
+			case "23505": // unique_violation
+				errStr = "Already exist"
+
+			default:
+				errStr = "Can't update user"
+			}
+		}
+		http.Error(w, errStr, http.StatusInternalServerError)
 		return
 	}
 
@@ -456,7 +511,7 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newRR, err := s.db.AddRecord(r.Context(),
+	id, err := s.db.AddRecord(r.Context(),
 		database.ResourceRecord{
 			Domain: rr.Domain,
 			Data:   rr.Data,
@@ -466,17 +521,31 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	if err != nil {
 		s.logger.Error("can't add resource record: " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		var pgErr *pgconn.PgError
+		var errStr string
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23502", "23503": // not_null_violation
+				errStr = "Uknown type or class"
+
+			case "23505": // unique_violation
+				errStr = "Already exist"
+
+			default:
+				errStr = "Can't update"
+			}
+		}
+		http.Error(w, errStr, http.StatusInternalServerError)
 		return
 	}
 
 	protoRR := &crudpb.ResourceRecord{
-		Id:         newRR.ID,
-		Domain:     newRR.Domain,
-		Data:       newRR.Data,
-		Type:       newRR.Type,
-		Class:      newRR.Class,
-		TimeToLive: newRR.TTL,
+		Id:         id,
+		Domain:     rr.Domain,
+		Data:       rr.Data,
+		Type:       rr.Type,
+		Class:      rr.Class,
+		TimeToLive: rr.TimeToLive,
 	}
 
 	result, err := proto.Marshal(protoRR)
@@ -485,7 +554,7 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/protobuf")
 	w.Write(result)
 	s.logger.Info(fmt.Sprintf("POST resource record: %s %d %s %s %s",
-		newRR.Domain, newRR.TTL, newRR.Class, newRR.Type, newRR.Data,
+		rr.Domain, rr.TimeToLive, rr.Class, rr.Type, rr.Data,
 	))
 }
 
@@ -533,4 +602,41 @@ func (s Server) patchRRHandler(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info(fmt.Sprintf("PATCH resource record, "+
 		"resource record with id %d was updated: %s %d %s %s %s",
 		rr.Id, rr.Domain, rr.TimeToLive, rr.Class, rr.Type, rr.Data))
+}
+
+func (s Server) getAllLogsHandler(w http.ResponseWriter, r *http.Request) {
+	result := &crudpb.LogCollection{}
+	file, err := os.Open("DNSServer.log")
+	if err != nil {
+	}
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		log := make(map[string]any)
+		err := json.Unmarshal([]byte(line), &log)
+		if err != nil {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, log["time"].(string))
+		if err != nil {
+			t = time.Now()
+		}
+		result.Logs = append(result.Logs, &crudpb.Log{
+			Time:  timestamppb.New(t),
+			Level: log["level"].(string),
+			Msg:   log["msg"].(string),
+		})
+	}
+	resp, err := proto.Marshal(result)
+	if err != nil {
+		s.logger.Error("can't get records from database: " + err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Add("Content-Type", "application/protobuf")
+	w.Write(resp)
+	s.logger.Info("GET all logs, " +
+		strconv.FormatInt(int64(len(result.Logs)), 10) + " logs returned")
 }
