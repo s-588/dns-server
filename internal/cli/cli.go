@@ -115,7 +115,7 @@ func StartServer() {
 	logger.Info("connection with database established")
 
 	config := []server.Option{
-		server.SetDNSPort(":1053"),
+		server.SetDNSPort(":53"),
 		server.WithDB(db),
 	}
 	s, err := server.NewServer(config...)
