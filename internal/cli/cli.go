@@ -9,12 +9,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/prionis/dns-server/cmd/tui"
 	"github.com/prionis/dns-server/internal/database"
 	"github.com/prionis/dns-server/internal/server"
 
 	"github.com/charmbracelet/bubbles/table"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -128,18 +126,6 @@ func StartServer() {
 	logger.Info("starting server")
 	if err := s.Start(ws); err != nil {
 		printError(fmt.Sprintf("can't start server\n%s", err.Error()))
-	}
-}
-
-func StartTUI() {
-	m, err := tui.NewModel()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't start. %s", err.Error())
-		return
-	}
-	p := tea.NewProgram(m, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		printError("can't open TUI\n" + err.Error())
 	}
 }
 

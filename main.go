@@ -8,14 +8,13 @@ import (
 
 func main() {
 	flagServer := flag.Bool("server", false, "start DNS server")
-	flagTUI := flag.Bool("tui", false, "show simple text interface")
 	flagListLog := flag.Bool("list-log", false, "show all logs in list view")
 	flagListRR := flag.Bool("list-rr", false, "show all resource records in list view")
 	flagAddRR := flag.String("add", "", "add new resource record. Accept 5 parameters (type,class,domain,data,TimeToLive). First 4 is necessary")
 	flagDelRR := flag.Int64("del", -1, "delete resource record. Accept ID of resource record to delete")
 
 	flag.Parse()
-	cli.CheckArgs(flagServer, flagTUI, flagListLog, flagListRR, flagAddRR, flagDelRR)
+	cli.CheckArgs(flagServer, flagListLog, flagListRR, flagAddRR, flagDelRR)
 
 	switch {
 	case *flagAddRR != "":
@@ -24,8 +23,6 @@ func main() {
 		// ui.DelRR(*flagDelRR)
 	case *flagServer:
 		cli.StartServer()
-	case *flagTUI:
-		cli.StartTUI()
 	case *flagListLog:
 		cli.PrintLogList()
 	case *flagListRR:
