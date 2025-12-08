@@ -1,4 +1,4 @@
-package models
+package crud
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/prionis/dns-server/cmd/tui/popup"
+	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/style"
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )

@@ -1,4 +1,4 @@
-package models
+package crud
 
 import (
 	"fmt"
@@ -7,18 +7,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/miekg/dns"
-	"github.com/prionis/dns-server/cmd/tui/popup"
+	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/style"
 	"github.com/prionis/dns-server/cmd/tui/transport"
-	"github.com/prionis/dns-server/internal/database"
 )
 
-type UpdateModel struct {
+// Add model represent page for adding new resource records to the database.
+type AddModel struct {
+	// Width and height of the screen.
 	width, height int
 	// Focused input field
 	focusIndex int
@@ -26,55 +26,37 @@ type UpdateModel struct {
 	inputFields []textinput.Model
 
 	// Add, Clear and Cancel buttons.
-	buttons      []string
-	cursor       int
+	buttons []string
+	// Selected button.
+	cursor int
+	// Are buttons focused or the inputs.
 	focusButtons bool
 
+	// Pointer to the database connection.
 	transport *transport.Transport
 }
 
-func NewUpdateModel(t *transport.Transport, row table.Row, w, h int) UpdateModel {
-	inputs := make([]textinput.Model, 0, 6)
-
-	idInput := textinput.New()
-	idInput.Width = w / 3
-	idInput.SetValue(row[0])
-	inputs = append(inputs, idInput)
+// Create new add model.
+func NewAddModel(t *transport.Transport, w, h int) AddModel {
+	inputs := make([]textinput.Model, 0, 5)
 
 	domainInput := textinput.New()
 	domainInput.Placeholder = "Domain name"
 	domainInput.Width = w / 3
-	domainInput.SetValue(row[1])
 	domainInput.Focus()
 	inputs = append(inputs, domainInput)
 
 	dataInput := textinput.New()
 	dataInput.Placeholder = "Data"
 	dataInput.Width = w / 3
-	dataInput.SetValue(row[2])
 	inputs = append(inputs, dataInput)
 
 	typeInput := textinput.New()
 	typeInput.Placeholder = "Type"
 	typeInput.Width = w / 3
-	typeInput.SetValue(row[3])
 	typeInput.SetSuggestions([]string{
-		"A",
-		"NS",
-		"MD",
-		"MF",
-		"CNAME",
-		"SOA",
-		"MB",
-		"MG",
-		"MR",
-		"NULL",
-		"WKS",
-		"PTR",
-		"HINFO",
-		"MINFO",
-		"MX",
-		"TXT",
+		"A", "NS", "MD", "MF", "CNAME", "SOA", "MB", "MG", "MR",
+		"NULL", "WKS", "PTR", "HINFO", "MINFO", "MX", "TXT",
 	})
 	inputs = append(inputs, typeInput)
 
@@ -82,22 +64,15 @@ func NewUpdateModel(t *transport.Transport, row table.Row, w, h int) UpdateModel
 	classInput.Placeholder = "Class"
 	classInput.ShowSuggestions = true
 	classInput.Width = w / 3
-	classInput.SetValue(row[4])
-	classInput.SetSuggestions([]string{
-		"IN",
-		"CS",
-		"CH",
-		"HS",
-	})
+	classInput.SetSuggestions([]string{"IN", "CS", "CH", "HS"})
 	inputs = append(inputs, classInput)
 
 	ttlInput := textinput.New()
 	ttlInput.Placeholder = "Time to live"
 	ttlInput.Width = w / 3
-	ttlInput.SetValue(row[5])
 	inputs = append(inputs, ttlInput)
 
-	return UpdateModel{
+	return AddModel{
 		width:       w,
 		height:      h,
 		inputFields: inputs,
@@ -106,55 +81,56 @@ func NewUpdateModel(t *transport.Transport, row table.Row, w, h int) UpdateModel
 	}
 }
 
-func (m UpdateModel) Init() tea.Cmd {
+func (dm AddModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Handle messages that comming from the user interactions.
+func (d AddModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up", "shift+tab":
-			if !m.focusButtons {
-				if m.focusIndex > 0 {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusIndex--
-					m.inputFields[m.focusIndex].Focus()
+			if !d.focusButtons {
+				if d.focusIndex > 0 {
+					d.inputFields[d.focusIndex].Blur()
+					d.focusIndex--
+					d.inputFields[d.focusIndex].Focus()
 				}
 			} else {
-				m.focusButtons = false
-				m.focusIndex = len(m.inputFields) - 1
-				m.inputFields[len(m.inputFields)-1].Focus()
+				d.focusButtons = false
+				d.focusIndex = len(d.inputFields) - 1
+				d.inputFields[len(d.inputFields)-1].Focus()
 			}
 
 		case "down", "tab":
-			if !m.focusButtons {
-				if m.focusIndex < len(m.inputFields)-1 {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusIndex++
-					m.inputFields[m.focusIndex].Focus()
+			if !d.focusButtons {
+				if d.focusIndex < len(d.inputFields)-1 {
+					d.inputFields[d.focusIndex].Blur()
+					d.focusIndex++
+					d.inputFields[d.focusIndex].Focus()
 				} else {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusButtons = true
-					m.cursor = 0
+					d.inputFields[d.focusIndex].Blur()
+					d.focusButtons = true
+					d.cursor = 0
 				}
 			} else {
-				m.focusButtons = false
-				m.focusIndex = 0
-				m.inputFields[0].Focus()
+				d.focusButtons = false
+				d.focusIndex = 0
+				d.inputFields[0].Focus()
 			}
 		case "left", "h":
-			if m.focusButtons && m.cursor > 0 {
-				m.cursor--
+			if d.focusButtons && d.cursor > 0 {
+				d.cursor--
 			}
 		case "right", "l":
-			if m.focusButtons && m.cursor < len(m.buttons)-1 {
-				m.cursor++
+			if d.focusButtons && d.cursor < len(d.buttons)-1 {
+				d.cursor++
 			}
 		case "ctrl+c":
-			return m, tea.Batch(
+			return d, tea.Batch(
 				func() tea.Msg {
 					return popup.PopupMsg{
 						Level:    "INFO",
@@ -167,19 +143,26 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				},
 			)
 		case "enter", " ":
-			if m.focusButtons {
-				if m.cursor == 0 { // Yes button
-					domain := m.inputFields[1].Value()
-					dataStr := m.inputFields[2].Value()
-					rrType := m.inputFields[3].Value()
-					class := m.inputFields[4].Value()
-					ttlStr := m.inputFields[5].Value()
+			if d.focusButtons {
+				if d.cursor == 0 { // Yes button
+					domain := d.inputFields[0].Value()
 
-					if ttlStr == "" {
-						ttlStr = "0"
+					rrType, ok := dns.StringToType[d.inputFields[2].Value()]
+					if !ok {
+						// TODO: process wrong type
 					}
-					if domain == "" || dataStr == "" || rrType == "" || class == "" {
-						return m, func() tea.Msg {
+
+					class, ok := dns.StringToClass[d.inputFields[3].Value()]
+					if !ok {
+						// TODO: process wrong class
+					}
+
+					ttlStr := d.inputFields[4].Value()
+					if d.inputFields[0].Value() == "" &&
+						d.inputFields[1].Value() == "" &&
+						d.inputFields[2].Value() == "" &&
+						d.inputFields[3].Value() == "" {
+						return d, func() tea.Msg {
 							return popup.PopupMsg{
 								Level:    "ERROR",
 								Msg:      "All fields are required",
@@ -187,21 +170,13 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 					}
-
-					data := net.ParseIP(dataStr)
-					if data == nil {
-						return m, func() tea.Msg {
-							return popup.PopupMsg{
-								Level:    "ERROR",
-								Msg:      "Invalid IP address",
-								Duration: 4 * time.Second,
-							}
-						}
+					if ttlStr == "" {
+						ttlStr = "0"
 					}
 
-					ttl, err := strconv.ParseInt(ttlStr, 10, 64)
+					ttl, err := strconv.ParseInt(ttlStr, 10, 32)
 					if err != nil {
-						return m, func() tea.Msg {
+						return d, func() tea.Msg {
 							return popup.PopupMsg{
 								Level:    "ERROR",
 								Msg:      "Invalid TTL",
@@ -210,52 +185,41 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 
-					if _, ok := dns.StringToType[rrType]; !ok {
-						return m, func() tea.Msg {
+					rdata := d.inputFields[1].Value()
+
+					switch rrType {
+					case dns.TypeA:
+						rdata = net.IP(rdata).To4().String()
+						if rdata == "<nil>" {
+							// TODO: process wrong ipv4 addres
+						}
+					case dns.TypeAAAA:
+						rdata = net.IP(rdata).To16().String()
+						if rdata == "<nil>" {
+							// TODO: process wrong ipv6 addres
+						}
+					case dns.TypeCNAME, dns.TypeNS, dns.TypeMX:
+						if _, ok := dns.IsDomainName(rdata); !ok {
+							// TODO: process wrong domain name
+						}
+					}
+
+					err = d.add(domain, rdata, dns.TypeToString[rrType], dns.ClassToString[class], ttl)
+					if err != nil {
+						return d, func() tea.Msg {
 							return popup.PopupMsg{
 								Level:    "ERROR",
-								Msg:      "Invalid record type",
+								Msg:      fmt.Sprintf("Failed to add record: %v", err),
 								Duration: 4 * time.Second,
 							}
 						}
 					}
 
-					if _, ok := dns.StringToClass[class]; !ok {
-						return m, func() tea.Msg {
-							return popup.PopupMsg{
-								Level:    "ERROR",
-								Msg:      "Invalid class",
-								Duration: 4 * time.Second,
-							}
-						}
-					}
-					idS := m.inputFields[0].Value()
-					id, err := strconv.ParseInt(idS, 10, 64)
-					if err != nil {
-						return m, func() tea.Msg {
-							return popup.PopupMsg{
-								Level:    "ERROR",
-								Msg:      fmt.Sprintf("Failed to parse id: %v", err),
-								Duration: 4 * time.Second,
-							}
-						}
-					}
-					err = m.update(id, domain, data.String(), rrType, class, ttl)
-					if err != nil {
-						return m, func() tea.Msg {
-							return popup.PopupMsg{
-								Level:    "ERROR",
-								Msg:      fmt.Sprintf("Failed to update record: %v", err),
-								Duration: 4 * time.Second,
-							}
-						}
-					}
-
-					return m, tea.Batch(
+					return d, tea.Batch(
 						func() tea.Msg {
 							return popup.PopupMsg{
 								Level:    "SUCCESS",
-								Msg:      fmt.Sprintf("Record %s updated", domain),
+								Msg:      fmt.Sprintf("Record %s added", domain),
 								Duration: 4 * time.Second,
 							}
 						},
@@ -264,7 +228,7 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						},
 					)
 				} else { // No button
-					return m, tea.Batch(
+					return d, tea.Batch(
 						func() tea.Msg {
 							return popup.PopupMsg{
 								Level:    "INFO",
@@ -279,15 +243,15 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else {
 				var cmd tea.Cmd
-				m.inputFields[m.focusIndex], cmd = m.inputFields[m.focusIndex].Update(msg)
+				d.inputFields[d.focusIndex], cmd = d.inputFields[d.focusIndex].Update(msg)
 				cmds = append(cmds, cmd)
 			}
 		case "esc", "q":
-			if m.focusButtons {
-				m.focusButtons = false
-				m.inputFields[m.focusIndex].Focus()
+			if d.focusButtons {
+				d.focusButtons = false
+				d.inputFields[d.focusIndex].Focus()
 			} else {
-				return m, tea.Batch(
+				return d, tea.Batch(
 					func() tea.Msg {
 						return popup.PopupMsg{
 							Level:    "INFO",
@@ -301,32 +265,27 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				)
 			}
 		default:
-			if !m.focusButtons {
+			if !d.focusButtons {
 				var cmd tea.Cmd
-				m.inputFields[m.focusIndex], cmd = m.inputFields[m.focusIndex].Update(msg)
+				d.inputFields[d.focusIndex], cmd = d.inputFields[d.focusIndex].Update(msg)
 				cmds = append(cmds, cmd)
 			}
 		}
 	}
-	return m, tea.Batch(cmds...)
+	return d, tea.Batch(cmds...)
 }
 
-func (m UpdateModel) update(id int64, domain, data, t, class string, ttl int64) error {
-	err := m.transport.UpdateRR(database.ResourceRecord{
-		ID:     id,
-		Domain: domain,
-		Data:   data,
-		Type:   t,
-		Class:  class,
-		TTL:    ttl,
-	})
+// Add record to the database.
+func (m AddModel) add(domain, data, rrType, class string, ttl int64) error {
+	err := m.transport.AddRR(domain, data, class, rrType, ttl)
 	if err != nil {
 		return fmt.Errorf("can't add new record: %w", err)
 	}
 	return nil
 }
 
-func (m UpdateModel) View() string {
+// Render page on the screen.
+func (m AddModel) View() string {
 	s := strings.Builder{}
 	s.WriteString(style.HeaderStyle.Render("Add new record"))
 	s.WriteString("\n\n")
@@ -356,12 +315,11 @@ func (m UpdateModel) View() string {
 	buttonsAlignCenter := lipgloss.NewStyle().Width(m.width - 4).Align(lipgloss.Center)
 	s.WriteString(buttonsAlignCenter.Render(lipgloss.JoinHorizontal(lipgloss.Top, styledButtons...)))
 
-	// Center content vertically
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
-type UpdateSuccessMsg struct {
+type AddSuccessMsg struct {
 	Id int64
 }
 
-type UpdateCancelMsg struct{}
+type AddCancelMsg struct{}

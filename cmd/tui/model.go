@@ -11,9 +11,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	crud "github.com/prionis/dns-server/cmd/tui/CRUD"
-	"github.com/prionis/dns-server/cmd/tui/auth"
-	"github.com/prionis/dns-server/cmd/tui/popup"
+	crud "github.com/prionis/dns-server/cmd/tui/models/crud"
+	"github.com/prionis/dns-server/cmd/tui/models/filter"
+	"github.com/prionis/dns-server/cmd/tui/models/popup"
+	"github.com/prionis/dns-server/cmd/tui/models/sort"
 	"github.com/prionis/dns-server/cmd/tui/transport"
 	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
 	"golang.org/x/term"
@@ -53,8 +54,6 @@ type model struct {
 	tabs        []tab
 	selectedTab int
 
-	loginPage auth.LoginModel
-
 	// Table that contain logs of the server.
 	logTable table.Model
 	// Table that contain resource records from the database.
@@ -70,9 +69,9 @@ type model struct {
 	// Model for updating resource records of the database.
 	updatePage crud.UpdateModel
 	// Model for filtering rows of the table.
-	filterPage crud.FilterModel
+	filterPage filter.FilterModel
 	// Model for sorting rows of the table.
-	sortPage crud.SortModel
+	sortPage sort.SortModel
 
 	// Pointer to the dabase connection.
 	transport *transport.Transport
@@ -107,7 +106,6 @@ func NewModel() (model, error) {
 
 	rrTable, logTable := rrTable(t, w, h), logTable(w, h)
 	return model{
-		loginPage:  auth.NewLoginModel(t, w, h),
 		focusLayer: focusLoginPage,
 
 		width:  w,
@@ -145,7 +143,7 @@ func NewModel() (model, error) {
 		popup:       popup.NewPopupModel(),
 		deleteModel: crud.NewDeleteModel(nil, t, w, h),
 		addModel:    crud.NewAddModel(t, w, h),
-		filterPage:  crud.NewFilterModel(nil, nil, w, h),
+		filterPage:  filter.NewFilterModel(nil, nil, w, h),
 	}, nil
 }
 

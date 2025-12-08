@@ -5,9 +5,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	crud "github.com/prionis/dns-server/cmd/tui/CRUD"
-	"github.com/prionis/dns-server/cmd/tui/auth"
-	"github.com/prionis/dns-server/cmd/tui/popup"
+	crud "github.com/prionis/dns-server/cmd/tui/models/crud"
+	"github.com/prionis/dns-server/cmd/tui/models/filter"
+	"github.com/prionis/dns-server/cmd/tui/models/popup"
+	"github.com/prionis/dns-server/cmd/tui/models/sort"
 )
 
 // Update handle all messages that comming from user interaction and other models.
@@ -17,14 +18,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
-	case auth.LoginSuccessMsg, auth.LoginCancelMsg:
-		m, cmd = m.HandleLoginMsgs(msg)
-		cmds = append(cmds, cmd)
-
-	case crud.SortMsg, crud.SortCancelMsg:
+	case sort.SortMsg, sort.SortCancelMsg:
 		m = m.handleSortMsgs(msg)
 
-	case crud.FilterMsg, crud.FilterCancelMsg:
+	case filter.FilterMsg, filter.FilterCancelMsg:
 		m = m.handleFilterMsgs(msg)
 
 	case crud.AddSuccessMsg, crud.AddCancelMsg:
@@ -49,22 +46,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) HandleLoginMsgs(msg tea.Msg) (model, tea.Cmd) {
-	var cmd tea.Cmd
-	switch msg := msg.(type) {
-	case auth.LoginSuccessMsg:
-		m.focusLayer = focusTabs
-		m.user = msg.User
-	case auth.LoginCancelMsg:
-		cmd = m.Close()
-	}
-	return m, cmd
-}
-
 // Handle sort messages of table.
 func (m model) handleSortMsgs(msg tea.Msg) model {
 	switch msg := msg.(type) {
-	case crud.SortMsg:
+	case sort.SortMsg:
 		if m.selectedTab == 0 {
 			m.logTable.SetRows(msg.Rows)
 			m.logTable.UpdateViewport()
@@ -77,7 +62,7 @@ func (m model) handleSortMsgs(msg tea.Msg) model {
 			m.rrTable.Focus()
 		}
 
-	case crud.SortCancelMsg:
+	case sort.SortCancelMsg:
 		m.focusLayer = focusButtons
 
 	}
@@ -87,7 +72,7 @@ func (m model) handleSortMsgs(msg tea.Msg) model {
 // Handle filter messages of table.
 func (m model) handleFilterMsgs(msg tea.Msg) model {
 	switch msg := msg.(type) {
-	case crud.FilterMsg:
+	case filter.FilterMsg:
 		if m.selectedTab == 0 {
 			m.logTable.SetRows(msg.Rows)
 			m.logTable.UpdateViewport()
@@ -99,7 +84,7 @@ func (m model) handleFilterMsgs(msg tea.Msg) model {
 			m.focusLayer = focusTable
 			m.rrTable.Focus()
 		}
-	case crud.FilterCancelMsg:
+	case filter.FilterCancelMsg:
 		m.focusLayer = focusTable
 	}
 	return m
@@ -198,11 +183,6 @@ func (m model) handleKeys(message tea.Msg) (model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch m.focusLayer {
 
-		case focusLoginPage:
-			model, cmd := m.loginPage.Update(msg)
-			m.loginPage = model.(auth.LoginModel)
-			return m, cmd
-
 		case focusUpdatePage:
 			model, cmd := m.updatePage.Update(msg)
 			m.updatePage = model.(crud.UpdateModel)
@@ -210,12 +190,12 @@ func (m model) handleKeys(message tea.Msg) (model, tea.Cmd) {
 
 		case focusSortPage:
 			model, cmd := m.sortPage.Update(msg)
-			m.sortPage = model.(crud.SortModel)
+			m.sortPage = model.(sort.SortModel)
 			return m, cmd
 
 		case focusFilterPage:
 			model, cmd := m.filterPage.Update(msg)
-			m.filterPage = model.(crud.FilterModel)
+			m.filterPage = model.(filter.FilterModel)
 			return m, cmd
 
 		case focusAddPage:
@@ -329,10 +309,10 @@ func (m model) handleKeys(message tea.Msg) (model, tea.Cmd) {
 						case 0: // view button
 							m.logTable.Focus()
 						case 1: // filter button
-							m.filterPage = crud.NewFilterModel(nil, &m.logTable, m.width, m.height)
+							m.filterPage = filter.NewFilterModel(nil, &m.logTable, m.width, m.height)
 							m.focusLayer = focusFilterPage
 						case 2: // sort button
-							m.sortPage = crud.NewSortModel(nil, &m.logTable, m.width, m.height, true)
+							m.sortPage = sort.NewSortModel(nil, &m.logTable, m.width, m.height, true)
 							m.focusLayer = focusSortPage
 						}
 					case 1: // records page
@@ -348,10 +328,10 @@ func (m model) handleKeys(message tea.Msg) (model, tea.Cmd) {
 							m.updatePage = crud.NewUpdateModel(m.transport, m.rrTable.SelectedRow(), m.width, m.height)
 							m.focusLayer = focusUpdatePage
 						case 4: // filter button
-							m.filterPage = crud.NewFilterModel(&m.rrTable, nil, m.width, m.height)
+							m.filterPage = filter.NewFilterModel(&m.rrTable, nil, m.width, m.height)
 							m.focusLayer = focusFilterPage
 						case 5: // sort button
-							m.sortPage = crud.NewSortModel(&m.rrTable, nil, m.width, m.height, false)
+							m.sortPage = sort.NewSortModel(&m.rrTable, nil, m.width, m.height, false)
 							m.focusLayer = focusSortPage
 						}
 					}

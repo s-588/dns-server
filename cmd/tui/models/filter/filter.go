@@ -1,4 +1,4 @@
-package models
+package filter
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/prionis/dns-server/cmd/tui/popup"
+	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/style"
 )
 
@@ -138,7 +138,7 @@ func (f FilterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				},
 				func() tea.Msg {
-					return AddCancelMsg{}
+					return FilterCancelMsg{}
 				},
 			)
 		case "enter", " ":
@@ -242,7 +242,7 @@ func (f FilterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						},
 						func() tea.Msg {
-							return AddCancelMsg{}
+							return FilterCancelMsg{}
 						},
 					)
 				}
@@ -265,7 +265,7 @@ func (f FilterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					},
 					func() tea.Msg {
-						return AddCancelMsg{}
+						return FilterCancelMsg{}
 					},
 				)
 			}

@@ -33,8 +33,7 @@ func (m model) rawView() string {
 	s.WriteString("\n\n")
 
 	switch m.focusLayer {
-	case focusLoginPage:
-		return m.loginPage.View()
+
 	case focusUpdatePage:
 		s.WriteString(m.updatePage.View())
 
