@@ -16,7 +16,6 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/models/sort"
 	"github.com/prionis/dns-server/cmd/tui/transport"
-	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
 	"golang.org/x/term"
 )
 
@@ -30,8 +29,6 @@ const (
 	focusUpdatePage
 	focusFilterPage
 	focusSortPage
-	focusLoginPage
-	focusRegister
 
 	// Minimum width and height of the screen to fit atleast one row in the tables
 	minWidth  = 52
@@ -45,8 +42,6 @@ type model struct {
 	width int
 	// Height of the screen
 	height int
-
-	user *crudpb.User
 
 	// What element user use right now
 	focusLayer int
@@ -106,7 +101,7 @@ func NewModel() (model, error) {
 
 	rrTable, logTable := rrTable(t, w, h), logTable(w, h)
 	return model{
-		focusLayer: focusLoginPage,
+		focusLayer: focusTabs,
 
 		width:  w,
 		height: h,
