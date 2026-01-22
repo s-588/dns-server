@@ -114,7 +114,7 @@ func (m model) handleScreenResize(msg tea.WindowSizeMsg) model {
 	m.width = msg.Width
 	m.height = msg.Height
 	// Update table dimensions
-	m.rrTable = rrTable(m.transport, msg.Width, msg.Height)
+	m.rrTable = rrTable(msg.Width, msg.Height)
 	m.logTable = logTable(msg.Width, msg.Height)
 	// Ensure the cursor stays within bounds
 	if m.rrTable.Cursor() >= len(m.rrTable.Rows()) && len(m.rrTable.Rows()) > 0 {
@@ -325,7 +325,7 @@ func (m model) handleKeys(message tea.Msg) (model, tea.Cmd) {
 							m.focusLayer = focusDeletePage
 							m.deleteModel.Record = m.rrTable.SelectedRow()
 						case 3: // update button
-							m.updatePage = crud.NewUpdateModel(m.transport, m.rrTable.SelectedRow(), m.width, m.height)
+							m.updatePage = crud.NewUpdateModel(m.rrTable.SelectedRow(), m.width, m.height)
 							m.focusLayer = focusUpdatePage
 						case 4: // filter button
 							m.filterPage = filter.NewFilterModel(&m.rrTable, nil, m.width, m.height)

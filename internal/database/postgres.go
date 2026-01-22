@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,6 +15,20 @@ import (
 
 	"github.com/prionis/dns-server/internal/database/sqlc"
 )
+
+var currentRepository *Repository
+var once sync.Once
+
+func GetRepository() *Repository{
+	once.Do(func() {
+		var err error
+		currentRepository, err = NewPostgres(GetConnectionString())
+		if err != nil{
+			slog.Error("can't retrieve postgres instance", "error",err)
+		}
+	})
+	return currentRepository
+}
 
 type Repository struct {
 	db *sqlc.Queries
@@ -35,25 +51,25 @@ type User struct {
 	Role      string
 }
 
-func NewPostgres(connString string) (Repository, error) {
+func NewPostgres(connString string) (*Repository, error) {
 	if connString == "" {
 		connString = GetConnectionString()
 	}
 	conn, err := pgx.Connect(context.Background(), connString)
 	if err != nil {
-		return Repository{}, fmt.Errorf("can't connect to  %w", err)
+		return nil, fmt.Errorf("can't connect to  %w", err)
 	}
 	if err = conn.Ping(context.Background()); err != nil {
-		return Repository{}, fmt.Errorf("can't ping the database: %w", err)
+		return nil, fmt.Errorf("can't ping the database: %w", err)
 	}
 
 	db := sqlc.New(conn)
 
-	return Repository{db}, nil
+	return &Repository{db}, nil
 }
 
 func GetConnectionString() string {
-	return fmt.Sprintf("postgres://%s:%s@postgres:5432/%s?sslmode=disable",
+	return fmt.Sprintf("postgres://%s:%s@localhost:5432/%s?sslmode=disable",
 		os.Getenv("POSTGRES_USER"),
 		os.Getenv("POSTGRES_PASSWORD"),
 		os.Getenv("POSTGRES_DB"))

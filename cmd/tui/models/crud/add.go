@@ -13,7 +13,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/style"
-	"github.com/prionis/dns-server/cmd/tui/transport"
+	"github.com/prionis/dns-server/internal/database"
 )
 
 // Add model represent page for adding new resource records to the database.
@@ -31,13 +31,10 @@ type AddModel struct {
 	cursor int
 	// Are buttons focused or the inputs.
 	focusButtons bool
-
-	// Pointer to the database connection.
-	transport *transport.Transport
 }
 
 // Create new add model.
-func NewAddModel(t *transport.Transport, w, h int) AddModel {
+func NewAddModel(w, h int) AddModel {
 	inputs := make([]textinput.Model, 0, 5)
 
 	domainInput := textinput.New()
@@ -77,7 +74,6 @@ func NewAddModel(t *transport.Transport, w, h int) AddModel {
 		height:      h,
 		inputFields: inputs,
 		buttons:     []string{"Yes", "No"},
-		transport:   t,
 	}
 }
 
@@ -277,7 +273,13 @@ func (d AddModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // Add record to the database.
 func (m AddModel) add(domain, data, rrType, class string, ttl int64) error {
-	err := m.transport.AddRR(domain, data, class, rrType, ttl)
+	err := database.GetRepository().AddRR(database.ResourceRecord{
+		Domain: domain,
+		Data:   data,
+		Type:   rrType,
+		Class: class,
+		TTL: ttl,
+	})
 	if err != nil {
 		return fmt.Errorf("can't add new record: %w", err)
 	}

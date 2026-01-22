@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/style"
-	"github.com/prionis/dns-server/cmd/tui/transport"
+	"github.com/prionis/dns-server/internal/database"
 )
 
 // Represent model for deletion the resource record from the database.
@@ -25,17 +25,13 @@ type DeleteModel struct {
 	buttons []string
 	// Selected button.
 	cursor int
-
-	// Pointer to the database connection
-	transport *transport.Transport
 }
 
 // Create new delete model.
-func NewDeleteModel(record table.Row, t *transport.Transport, w, h int) DeleteModel {
+func NewDeleteModel(record table.Row, w, h int) DeleteModel {
 	return DeleteModel{
 		Record:    record,
 		buttons:   []string{"Yes", "No"},
-		transport: t,
 		width:     w,
 		height:    h,
 	}
@@ -118,7 +114,7 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // Delete record from database.
 func (d DeleteModel) delete(id int64) error {
-	err := d.transport.DeleteRR(id)
+	err := database.GetRepository().DelRR(id)
 	if err != nil {
 		return fmt.Errorf("can't delete from database: %w", err)
 	}

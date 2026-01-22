@@ -1,6 +1,7 @@
 package crud
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -14,7 +15,6 @@ import (
 	"github.com/miekg/dns"
 	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/style"
-	"github.com/prionis/dns-server/cmd/tui/transport"
 	"github.com/prionis/dns-server/internal/database"
 )
 
@@ -29,11 +29,9 @@ type UpdateModel struct {
 	buttons      []string
 	cursor       int
 	focusButtons bool
-
-	transport *transport.Transport
 }
 
-func NewUpdateModel(t *transport.Transport, row table.Row, w, h int) UpdateModel {
+func NewUpdateModel(row table.Row, w, h int) UpdateModel {
 	inputs := make([]textinput.Model, 0, 6)
 
 	idInput := textinput.New()
@@ -102,7 +100,6 @@ func NewUpdateModel(t *transport.Transport, row table.Row, w, h int) UpdateModel
 		height:      h,
 		inputFields: inputs,
 		buttons:     []string{"Yes", "No"},
-		transport:   t,
 	}
 }
 
@@ -312,7 +309,7 @@ func (m UpdateModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m UpdateModel) update(id int64, domain, data, t, class string, ttl int64) error {
-	err := m.transport.UpdateRR(database.ResourceRecord{
+	err := database.GetRepository().UpdateRR(context.Background(), database.ResourceRecord{
 		ID:     id,
 		Domain: domain,
 		Data:   data,

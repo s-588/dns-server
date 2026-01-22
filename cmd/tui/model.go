@@ -15,7 +15,7 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/models/filter"
 	"github.com/prionis/dns-server/cmd/tui/models/popup"
 	"github.com/prionis/dns-server/cmd/tui/models/sort"
-	"github.com/prionis/dns-server/cmd/tui/transport"
+	"github.com/prionis/dns-server/internal/database"
 	"golang.org/x/term"
 )
 
@@ -67,9 +67,6 @@ type model struct {
 	filterPage filter.FilterModel
 	// Model for sorting rows of the table.
 	sortPage sort.SortModel
-
-	// Pointer to the dabase connection.
-	transport *transport.Transport
 }
 
 // Struct for representing tab on the top of the screen.
@@ -94,12 +91,7 @@ func NewModel() (model, error) {
 				minWidth, minHeight, w, h)
 	}
 
-	t, err := transport.New("172.17.0.1:8083")
-	if err != nil {
-		return model{}, fmt.Errorf("can't create http transport: %w", err)
-	}
-
-	rrTable, logTable := rrTable(t, w, h), logTable(w, h)
+	rrTable, logTable := rrTable(w, h), logTable(w, h)
 	return model{
 		focusLayer: focusTabs,
 
@@ -130,21 +122,20 @@ func NewModel() (model, error) {
 				},
 			},
 		},
-		transport: t,
 
 		rrTable:  rrTable,
 		logTable: logTable,
 
 		popup:       popup.NewPopupModel(),
-		deleteModel: crud.NewDeleteModel(nil, t, w, h),
-		addModel:    crud.NewAddModel(t, w, h),
+		deleteModel: crud.NewDeleteModel(nil, w, h),
+		addModel:    crud.NewAddModel(w, h),
 		filterPage:  filter.NewFilterModel(nil, nil, w, h),
 	}, nil
 }
 
 // Create new table for the resource records and fill it with data from database.
-func rrTable(t *transport.Transport, w, h int) table.Model {
-	dbRRs, err := t.GetAllRRs()
+func rrTable(w, h int) table.Model {
+	dbRRs, err := database.GetRepository().GetAllRRs()
 	if err != nil {
 		slog.Error("can't get records from database", "error", err)
 	}

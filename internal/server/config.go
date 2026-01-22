@@ -4,9 +4,8 @@ import "github.com/prionis/dns-server/internal/database"
 
 type options struct {
 	dnsPort  string
-	httpPort string
 	logger   Logger
-	db       database.Repository
+	db       *database.Repository
 }
 
 type Option interface {
@@ -54,13 +53,13 @@ func WithLogger(l Logger) Option {
 // Database option
 
 type dbOption struct {
-	db database.Repository
+	db *database.Repository
 }
 
 func (d dbOption) apply(opts *options) {
 	opts.db = d.db
 }
 
-func WithDB(db database.Repository) Option {
+func WithDB(db *database.Repository) Option {
 	return dbOption{db}
 }

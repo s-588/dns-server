@@ -110,7 +110,7 @@ func StartServer() {
 	logger := slog.New(slog.NewJSONHandler(writer, nil))
 	slog.SetDefault(logger)
 
-	db, err := database.NewPostgres("")
+	db := database.GetRepository()
 	if err != nil {
 		fmt.Println("can't connect to database\n" + err.Error())
 		return
