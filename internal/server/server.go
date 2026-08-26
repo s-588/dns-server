@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/miekg/dns"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/prionis/dns-server/internal/database"
 )
@@ -24,8 +26,8 @@ var (
 type Server struct {
 	dnsPort  string
 	httpPort string
-	logger   Logger
 	db       database.Repository
+	metrics  *Metrics
 }
 
 func NewServer(opts ...Option) (Server, error) {
@@ -34,7 +36,6 @@ func NewServer(opts ...Option) (Server, error) {
 	conf := options{
 		dnsPort:  ":53",
 		httpPort: ":8083",
-		logger:   slog.Default(),
 	}
 	for _, opt := range opts {
 		opt.apply(&conf)
@@ -44,7 +45,7 @@ func NewServer(opts ...Option) (Server, error) {
 		dnsPort:  conf.dnsPort,
 		httpPort: ":8083",
 		db:       conf.db,
-		logger:   conf.logger,
+		metrics:  NewMetrics(),
 	}
 	return s, nil
 }
@@ -59,12 +60,12 @@ func (s Server) Start(ws *WebSocket) error {
 			Role:      "admin",
 		}, "admin")
 		if err != nil {
-			s.logger.Error(fmt.Sprintf("Can't create new user: %s", err.Error()))
+			slog.Error(fmt.Sprintf("Can't create new user: %s", err.Error()))
 		} else {
-			s.logger.Info(fmt.Sprintf("New admin was created: %v", user))
+			slog.Info(fmt.Sprintf("New admin was created: %v", user))
 		}
 	} else {
-		s.logger.Info("admin user exists")
+		slog.Info("admin user exists")
 	}
 
 	dns.HandleFunc(".", s.dnsHandler)
@@ -74,18 +75,21 @@ func (s Server) Start(ws *WebSocket) error {
 
 	go s.serveHTTP(ws)
 
-	s.logger.Info("server listen DNS requests on " + s.dnsPort)
-	signals := make(chan os.Signal)
+	slog.Info("server listen DNS requests on " + s.dnsPort)
+	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-signals
-	s.logger.Info("Signal(" + sig.String() + ") recived, terminating")
+	slog.Info("Signal(" + sig.String() + ") recived, terminating")
 	return nil
 }
 
 func (s Server) serveHTTP(ws *WebSocket) {
 	router := chi.NewRouter()
 	router.Use(s.loggerMiddleware())
-
+	router.Use(prometheusMiddleware(s.metrics))
+	reg := prometheus.NewRegistry()
+	s.metrics.RegisterAll(reg)
+	router.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 	router.Route("/auth", func(r chi.Router) {
 		r.Use(s.timeoutMiddleware(10 * time.Second))
 		r.Post("/login", s.loginHandler)
@@ -126,7 +130,7 @@ func (s Server) serveHTTP(ws *WebSocket) {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	s.logger.Info("server listen HTTP requests on " + s.httpPort)
+	slog.Info("server listen HTTP requests on " + s.httpPort)
 	server.ListenAndServe()
 }
 
