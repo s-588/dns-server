@@ -2,19 +2,26 @@ package database
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"os"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/prionis/dns-server/internal/database/sqlc"
 )
 
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
 // Postgres struct represent connection to the PostgreSQL database.
 type Postgres struct {
-	db *sqlc.Queries
+	db   *sqlc.Queries
+	pool *pgxpool.Pool
 }
 
 // NewPostgres create new connection to the PostgreSQL database.
@@ -22,17 +29,20 @@ func NewPostgres(connString string) (Postgres, error) {
 	if connString == "" {
 		connString = GetConnectionString()
 	}
-	conn, err := pgx.Connect(context.Background(), connString)
+	p := Postgres{}
+	pool, err := pgxpool.New(context.Background(), connString)
 	if err != nil {
 		return Postgres{}, fmt.Errorf("can't connect to  %w", err)
 	}
-	if err = conn.Ping(context.Background()); err != nil {
+	if err = pool.Ping(context.Background()); err != nil {
 		return Postgres{}, fmt.Errorf("can't ping the database: %w", err)
 	}
+	p.pool = pool
 
-	db := sqlc.New(conn)
+	p.db = sqlc.New(pool)
+	p.initDB()
 
-	return Postgres{db}, nil
+	return p, nil
 }
 
 // GetConnectionString return the formated connection string for connecting to the PostgreSQL.
@@ -255,4 +265,18 @@ func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) 
 // DeleteUser delete user with provided id.
 func (repo Postgres) DeleteUser(ctx context.Context, id int32) error {
 	return repo.db.DeleteUser(ctx, id)
+}
+
+// initDB methods connects to Postgres and execute migrations
+func (p Postgres) initDB() error {
+	goose.SetBaseFS(migrationsFS)
+	if err := goose.SetDialect(string(goose.DialectPostgres)); err != nil {
+		return fmt.Errorf("set dialect for goose: %w", err)
+	}
+
+	if err := goose.Up(stdlib.OpenDBFromPool(p.pool), "migrations"); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	return nil
 }

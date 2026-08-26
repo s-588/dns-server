@@ -5,7 +5,6 @@ import "github.com/prionis/dns-server/internal/database"
 type options struct {
 	dnsPort  string
 	httpPort string
-	logger   Logger
 	db       database.Repository
 }
 
@@ -35,20 +34,6 @@ func (p httpPort) apply(opts *options) {
 
 func SetHTTPPort(p string) Option {
 	return dnsPort(p)
-}
-
-// Logger option
-
-type loggerOption struct {
-	logger Logger
-}
-
-func (l loggerOption) apply(opts *options) {
-	opts.logger = l.logger
-}
-
-func WithLogger(l Logger) Option {
-	return loggerOption{l}
 }
 
 // Database option
