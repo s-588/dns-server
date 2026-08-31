@@ -1,4 +1,4 @@
-package dns
+package codec
 
 import (
 	"reflect"
@@ -173,6 +173,39 @@ func TestReader_ReadName(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("Reader.ReadName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReader_Uint32(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    []byte
+		pos     int
+		want    uint32
+		wantErr bool
+	}{
+		{"ok", []byte{1, 0, 0, 1}, 0, 0x01000001, false},
+		{"ok; pos in the middle", []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 2, 0x03040506, false},
+		{"eof at start", []byte{}, 0, 0, true},
+		{"pos past end", []byte{1}, 1, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &Reader{
+				data: tt.data,
+				pos:  tt.pos,
+			}
+			got, err := r.Uint32()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Reader.Uint32() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Reader.Uint32() = %v, want %v", got, tt.want)
 			}
 		})
 	}

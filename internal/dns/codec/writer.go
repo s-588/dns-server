@@ -1,4 +1,4 @@
-package dns
+package codec
 
 import (
 	"encoding/binary"
@@ -31,6 +31,14 @@ func (w *Writer) Uint16(v uint16) {
 	var buf [2]byte
 
 	binary.BigEndian.PutUint16(buf[:], v)
+
+	w.buf = append(w.buf, buf[:]...)
+}
+
+func (w *Writer) Uint32(v uint32) {
+	var buf [4]byte
+
+	binary.BigEndian.PutUint32(buf[:], v)
 
 	w.buf = append(w.buf, buf[:]...)
 }
@@ -80,4 +88,8 @@ func (w *Writer) WriteName(name string) error {
 
 func (w *Writer) writePointer(offset uint16) {
 	w.Uint16(0xC000 | offset)
+}
+
+func (w *Writer) Buffer() []byte {
+	return w.buf
 }

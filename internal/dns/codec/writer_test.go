@@ -1,6 +1,7 @@
-package dns
+package codec
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -16,12 +17,16 @@ func TestNewWriter(t *testing.T) {
 	}
 }
 
-func TestWriter_Uint8_Uint16_Bytes(t *testing.T) {
+func TestWriter_Uint8_Uint16_Uint32_Bytes(t *testing.T) {
 	w := NewWriter()
 	w.Uint8(1)
-	w.Uint16(0x0203)
+	w.Uint16(0x0101)
+	w.Uint32(0x01010101)
 	w.Bytes([]byte{4, 5})
-	want := []byte{1, 2, 3, 4, 5}
+	want := []byte{1,
+		1, 1,
+		1, 1, 1, 1,
+		4, 5}
 	if !slices.Equal(w.buf, want) {
 		t.Fatalf("got %v, want %v", w.buf, want)
 	}
@@ -74,5 +79,27 @@ func TestWriter_writePointer(t *testing.T) {
 		0xC0, 0}
 	if !slices.Equal(w.buf, want) {
 		t.Fatalf("got: %s(%v), want %s(%v)", w.buf, w.buf, want, want)
+	}
+}
+
+func TestWriter_Buffer(t *testing.T) {
+	tests := []struct {
+		name string
+		buf  []byte
+		want []byte
+	}{
+		{"empty buffer", []byte{}, []byte{}},
+		{"non empty buffer", []byte{1, 2, 3}, []byte{1, 2, 3}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &Writer{
+				buf:         tt.buf,
+				compression: make(map[string]uint16),
+			}
+			if got := w.Buffer(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Writer.Buffer() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
