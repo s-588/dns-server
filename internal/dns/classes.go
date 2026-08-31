@@ -40,3 +40,12 @@ func (c Class) ParseClass(s string) (Class, bool) {
 		return 0, false
 	}
 }
+
+func (c Class) IsValid() bool {
+	switch c {
+	case ClassIN, ClassCS, ClassCH, ClassHS:
+		return true
+	default:
+		return false
+	}
+}

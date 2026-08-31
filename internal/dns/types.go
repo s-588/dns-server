@@ -60,3 +60,12 @@ func ParseType(s string) (Type, bool) {
 		return 0, false
 	}
 }
+
+func (t *Type) IsValid() bool {
+	switch *t {
+	case TypeA, TypeNS, TypeCNAME, TypeSOA, TypePTR, TypeMX, TypeTXT, TypeAAAA:
+		return true
+	default:
+		return false
+	}
+}

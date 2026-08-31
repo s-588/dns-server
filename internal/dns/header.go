@@ -57,7 +57,7 @@ const (
 )
 
 func (h Header) Opcode() OPCODE {
-	return OPCODE(uint8(h.Flags&FlagOpcodeMask) >> FlagOpcodeshift)
+	return OPCODE(h.Flags & FlagOpcodeMask >> FlagOpcodeshift)
 }
 
 func (h *Header) SetOpcode(opcode OPCODE) {
