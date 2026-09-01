@@ -146,8 +146,6 @@ func TestReader_Bytes(t *testing.T) {
 }
 
 func TestReader_ReadName(t *testing.T) {
-	type fields struct {
-	}
 	tests := []struct {
 		name    string
 		data    []byte
@@ -175,6 +173,67 @@ func TestReader_ReadName(t *testing.T) {
 				t.Errorf("Reader.ReadName() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestReader_ReadNameWithPointer(t *testing.T) {
+	data := []byte{
+		3, 'w', 'w', 'w',
+		7, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+		3, 'c', 'o', 'm',
+		0,
+		4, 'm', 'a', 'i', 'l',
+		0xC0, 0x04,
+		0xFF,
+	}
+
+	r := NewReader(data)
+
+	name1, err := r.ReadName()
+	if err != nil {
+		t.Fatalf("ReadName #1: %v", err)
+	}
+	if name1 != "www.example.com" {
+		t.Fatalf("name1 = %q, want %q", name1, "www.example.com")
+	}
+
+	name2, err := r.ReadName()
+	if err != nil {
+		t.Fatalf("ReadName #2: %v", err)
+	}
+	if name2 != "mail.example.com" {
+		t.Fatalf("name2 = %q, want %q", name2, "mail.example.com")
+	}
+
+	end, err := r.Uint8()
+	if err != nil {
+		t.Fatalf("reading sentinel: %v", err)
+	}
+	if end != 0xFF {
+		t.Fatalf("sentinel = %#x, want 0xFF; reader position not restored", end)
+	}
+}
+
+func TestReader_ReadNameWithMultiplePointers(t *testing.T) {
+	// A -> B -> C
+	data := []byte{
+		3, 'c', 'o', 'm', 0,
+		// example + pointer to com
+		7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 0xC0, 0x00,
+		// www + pointer to example
+		3, 'w', 'w', 'w', 0xC0, 0x05,
+	}
+
+	r := NewReader(data)
+
+	if n, err := r.ReadName(); err != nil || n != "com" {
+		t.Fatalf("1st name without pointer: %q %v", n, err)
+	}
+	if n, err := r.ReadName(); err != nil || n != "example.com" {
+		t.Fatalf("2nd name with pointer: %q %v", n, err)
+	}
+	if n, err := r.ReadName(); err != nil || n != "www.example.com" {
+		t.Fatalf("3rd name with 2 pointer: %q %v", n, err)
 	}
 }
 

@@ -1,10 +1,13 @@
 package codec
 
 import (
+	"bytes"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/prionis/dns-server/internal/dns/codec"
 )
 
 func TestNewWriter(t *testing.T) {
@@ -56,6 +59,39 @@ func TestWriter_WriteName(t *testing.T) {
 				t.Errorf("Writer.WriteName() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+func TestWriter_WriteNameWithPointer(t *testing.T) {
+	w := codec.NewWriter()
+
+	if err := w.WriteName("www.example.com"); err != nil {
+		t.Fatalf("WriteName: %v", err)
+	}
+
+	// example.com - compressed suffix
+	if err := w.WriteName("mail.example.com"); err != nil {
+		t.Fatalf("WriteName: %v", err)
+	}
+
+	got := w.Buffer()
+
+	//  0: 3 www
+	//  4: 7 example
+	// 12: 3 com
+	// 16: 0
+	// 17: 4 mail
+	// 22: C0 04
+	want := []byte{
+		3, 'w', 'w', 'w',
+		7, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+		3, 'c', 'o', 'm',
+		0,
+		4, 'm', 'a', 'i', 'l',
+		0xC0, 0x04,
+	}
+
+	if !bytes.Equal(got, want) {
+		t.Fatalf("compressed wire format\ngot  %v\nwant %v", got, want)
 	}
 }
 
