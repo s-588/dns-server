@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -68,10 +68,8 @@ func (s Server) Start(ws *WebSocket) error {
 		slog.Info("admin user exists")
 	}
 
-	dns.HandleFunc(".", s.dnsHandler)
-
-	go s.serveDNS("udp")
-	go s.serveDNS("tcp")
+	go s.serveUDP()
+	go s.serveTCP()
 
 	go s.serveHTTP(ws)
 
@@ -134,10 +132,64 @@ func (s Server) serveHTTP(ws *WebSocket) {
 	server.ListenAndServe()
 }
 
-func (s Server) serveDNS(net string) {
-	dnsServer := dns.Server{
-		Net:  net,
-		Addr: s.dnsPort,
+func (s *Server) serveUDP() {
+	addr, err := net.ResolveUDPAddr("udp", s.dnsPort)
+	if err != nil {
+		slog.Error("resolve UDP address", "error", err)
+		return
 	}
-	dnsServer.ListenAndServe()
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		slog.Error("listen UDP", "error", err)
+		return
+	}
+	defer conn.Close()
+
+	buf := make([]byte, 512)
+	for {
+		n, clientAddr, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			continue
+		}
+
+		go func(data []byte, addr *net.UDPAddr) {
+			resp := s.dnsHandler(data)
+			if resp != nil {
+				conn.WriteToUDP(resp, addr)
+			}
+		}(append([]byte(nil), buf[:n]...), clientAddr)
+	}
+}
+
+func (s *Server) serveTCP() {
+	addr, err := net.ResolveTCPAddr("tcp", s.dnsPort)
+	if err != nil {
+		slog.Error("resolve TCP addr", "error", err)
+		return
+	}
+	listener, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		slog.Error("listen TCP", "error", err)
+		return
+	}
+	defer listener.Close()
+
+	buf := make([]byte, 512)
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+
+		go func(conn net.Conn) {
+			_, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			resp := s.dnsHandler(append([]byte(nil), buf...))
+			if resp != nil {
+				conn.Write(resp)
+			}
+		}(conn)
+	}
 }

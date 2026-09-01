@@ -16,56 +16,95 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/miekg/dns"
 	"github.com/prionis/dns-server/internal/database"
+	"github.com/prionis/dns-server/internal/dns"
 	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// dnsHandler it is the tcp/udp handler for dns questions.
-func (s Server) dnsHandler(w dns.ResponseWriter, msg *dns.Msg) {
+// dnsHandler method is called by the UDP/TCP listeners and
+// provide processing of the raw msg.
+func (s Server) dnsHandler(msg []byte) []byte {
 	start := time.Now()
-	m := new(dns.Msg)
-	m.SetReply(msg)
-	for _, question := range m.Question {
+	var respCode dns.RCode
+	var req dns.Message
+	if err := req.UnmarshalBinary(msg); err != nil {
+		slog.Error("unmarshal message: %w", "error", err)
+		respCode = dns.RCodeFormatError
+	}
+	resp := dns.Message{
+		Header: dns.Header{
+			ID: req.Header.ID,
+		},
+	}
+	resp.Header.SetFlag(dns.FlagQR)
+	resp.Questions = append(resp.Questions, req.Questions...)
+	for _, q := range req.Questions {
 		answers, err := s.db.FindRecords(context.Background(),
-			question.Name,
-			dns.TypeToString[question.Qtype])
+			q.Name,
+			q.Type.String())
 		if err != nil {
-			slog.Error("can't get resource records from database: " + err.Error())
+			slog.Error("can't get resource records from database", "error", err.Error())
+			continue
 		}
 		if len(answers) == 0 {
-			slog.Warn("domain '" + question.Name + "' and type '" +
-				dns.TypeToString[question.Qtype] + "' not found")
+			slog.Warn("domain not found", "name", q.Name, "type", q.Type)
 		}
-		for _, answer := range answers {
-			rr, err := dns.NewRR(fmt.Sprintf("%s %d %s %s %s",
-				answer.Domain,
-				answer.TTL,
-				answer.Class,
-				answer.Type,
-				answer.Data,
-			))
-			if err != nil {
-				slog.Error("can't parse resource record from database to answer")
+		for _, a := range answers {
+			t, ok := dns.ParseType(a.Type)
+			if !ok {
+				slog.Error("uknown type", "domain", a.Domain, "type", a.Type)
+				continue
 			}
-			slog.Info("found answer: " + rr.String())
-			m.Answer = append(m.Answer, rr)
+			c, ok := dns.ParseClass(a.Class)
+			if !ok {
+				slog.Error("uknown class", "domain", a.Domain, "class", a.Class)
+				continue
+			}
+			rdata, err := dns.ParseRData(t, a.Data)
+			if err != nil {
+				slog.Error("can't parse RDATA", "domain", a.Domain, "type", a.Type, "data", a.Data)
+				continue
+			}
+			respData, err := rdata.MarshalBinary()
+			if err != nil {
+				slog.Error("can't marshal RDATA", "domain", a.Domain, "type", a.Type, "rdata", rdata)
+				continue
+			}
+
+			rr := dns.RR{
+				Name:     a.Domain,
+				Type:     t,
+				Class:    c,
+				TTL:      uint32(a.TTL),
+				RDLength: uint16(len(respData)),
+				RData:    rdata,
+			}
+			slog.Info("found answer", "RR", rr)
+			req.Answers = append(req.Answers, rr)
 		}
 		s.metrics.DNSQueriesTotal.WithLabelValues(
-			dns.TypeToString[question.Qtype],
-			dns.RcodeToString[msg.Rcode]).Inc()
+			q.Type.String(),
+			respCode.String()).Inc()
 		s.metrics.DNSRecordsFound.
-			WithLabelValues(dns.TypeToString[question.Qtype]).
-			Add(float64(len(m.Answer)))
+			WithLabelValues(q.Type.String()).
+			Add(float64(len(req.Answers)))
 		s.metrics.DNSQueryDuration.
-			WithLabelValues(dns.TypeToString[question.Qtype]).
+			WithLabelValues(q.Type.String()).
 			Observe(time.Since(start).Seconds())
 	}
-	slog.Info(m.String())
-	w.WriteMsg(m)
+
+	resp.Header.QDCount = uint16(len(resp.Questions))
+	resp.Header.ANCount = uint16(len(resp.Answers))
+
+	out, err := resp.MarshalBinary()
+	if err != nil {
+		slog.Error("marshal response", "error", err)
+		return nil
+	}
+	return out
 }
 
 // loginHandler handle login requests, accept user credentials, process and add jwt token to the response.
