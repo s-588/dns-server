@@ -26,7 +26,7 @@ func (c Class) String() string {
 	}
 }
 
-func (c Class) ParseClass(s string) (Class, bool) {
+func ParseClass(s string) (Class, bool) {
 	switch s {
 	case "IN":
 		return ClassIN, true
@@ -38,14 +38,5 @@ func (c Class) ParseClass(s string) (Class, bool) {
 		return ClassHS, true
 	default:
 		return 0, false
-	}
-}
-
-func (c Class) IsValid() bool {
-	switch c {
-	case ClassIN, ClassCS, ClassCH, ClassHS:
-		return true
-	default:
-		return false
 	}
 }
