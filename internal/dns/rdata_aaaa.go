@@ -23,9 +23,9 @@ func (aaaa AAAA) MarshalBinary() ([]byte, error) {
 }
 
 func (aaaa *AAAA) UnmarshalBinary(data []byte) error {
-	ip, err := netip.ParseAddr(string(data))
-	if err != nil {
-		return fmt.Errorf("parse IP: %w", err)
+	ip, ok := netip.AddrFromSlice(data)
+	if !ok {
+		return fmt.Errorf("can't parse IP")
 	}
 	if !aaaa.IP.Is6() {
 		return errors.New("AAAA record should use IPv6")

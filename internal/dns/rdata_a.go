@@ -23,10 +23,10 @@ func (a *A) MarshalBinary() ([]byte, error) {
 	return a.IP.AsSlice(), nil
 }
 
-func (a *A)UnmarshalBinary(data []byte) error{
-	ip, err := netip.ParseAddr(string(data))
-	if err != nil {
-		return fmt.Errorf("parse IP: %w", err)
+func (a *A) UnmarshalBinary(data []byte) error {
+	ip, ok := netip.AddrFromSlice(data)
+	if !ok {
+		return fmt.Errorf("can't parse IP")
 	}
 	a.IP = ip
 	return nil
