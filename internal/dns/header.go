@@ -22,6 +22,10 @@ const (
 	FlagRcodeMask   uint16 = 0b0000_0000_0000_1111
 )
 
+func (h *Header) SetFlag(flag uint16) {
+	h.Flags |= flag
+}
+
 type OPCODE uint8
 
 func (o OPCODE) String() string {
