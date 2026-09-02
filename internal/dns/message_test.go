@@ -56,7 +56,7 @@ func Test_RR_RoundTrip(t *testing.T) {
 		t.Fatalf("error was not expected: %s", err)
 	}
 	r := codec.NewReader(w.Buffer())
-	newQ, err := decodeQuestion(r)
+	newQ, err := decodeRR(r)
 	if err != nil {
 		t.Fatalf("error was not expected: %s", err)
 	}

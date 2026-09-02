@@ -90,7 +90,7 @@ func (r *Reader) ReadName() (string, error) {
 			// length&0b0011_1111 clears lower 6 bits
 			// << 8 shift 6 lower bits and makes them highest in 14 bit number
 			// | secondHalf fills lower 8 bits
-			ptr := length&0b0011_1111<<8 | secondHalf
+			ptr := uint16(length&0b0011_1111)<<8 | uint16(secondHalf)
 			if !jumped {
 				start = r.pos
 				jumped = true

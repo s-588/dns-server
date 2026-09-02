@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/prionis/dns-server/internal/dns/codec"
 )
 
 func TestNewWriter(t *testing.T) {
@@ -62,7 +60,7 @@ func TestWriter_WriteName(t *testing.T) {
 	}
 }
 func TestWriter_WriteNameWithPointer(t *testing.T) {
-	w := codec.NewWriter()
+	w := NewWriter()
 
 	if err := w.WriteName("www.example.com"); err != nil {
 		t.Fatalf("WriteName: %v", err)

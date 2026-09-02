@@ -13,13 +13,13 @@ type Header struct {
 
 const (
 	FlagQR          uint16 = 1 << 15
-	FlagOpcodeMask  uint16 = 0b0000_1111_0000_0000
+	FlagOpcodeMask  uint16 = 0b0111_1000_0000_0000
 	FlagOpcodeshift        = 11
 	FlagAA          uint16 = 1 << 10
 	FlagTC          uint16 = 1 << 9
 	FlagRD          uint16 = 1 << 8
 	FlagRA          uint16 = 1 << 7
-	FlagRcodeMask   uint16 = 0b0000_0000_0000_1111
+	FlagRcodeMask   uint16 = 0x000F
 )
 
 func (h *Header) SetFlag(flag uint16) {
