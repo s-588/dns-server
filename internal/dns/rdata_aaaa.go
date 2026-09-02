@@ -27,7 +27,7 @@ func (aaaa *AAAA) UnmarshalBinary(data []byte) error {
 	if !ok {
 		return fmt.Errorf("can't parse IP")
 	}
-	if !aaaa.IP.Is6() {
+	if !ip.Is6() {
 		return errors.New("AAAA record should use IPv6")
 	}
 	aaaa.IP = ip
