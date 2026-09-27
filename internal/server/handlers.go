@@ -310,8 +310,12 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(body)
-	slog.Info("GET resource record %s %d %s %s %s",
-		rr.Domain, rr.TTL, rr.Class, rr.Type, rr.Data,
+	slog.Info("GET resource record",
+		"Domain", rr.Domain,
+		"TTL", rr.TTL,
+		"Class", rr.Class,
+		"Type", rr.Type,
+		"Data", rr.Data,
 	)
 }
 

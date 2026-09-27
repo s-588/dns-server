@@ -77,7 +77,7 @@ func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (int32, e
 		Type:       rr.Type,
 		Class:      rr.Class,
 		Data:       rr.Data,
-		TimeToLive: pgtype.Int4{int32(rr.TTL), true},
+		TimeToLive: pgtype.Int4{Int32: int32(rr.TTL), Valid: true},
 	})
 	if err != nil {
 		return 0, err
@@ -114,7 +114,7 @@ func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error 
 		Data:       rr.Data,
 		Type:       rr.Type,
 		Class:      rr.Class,
-		TimeToLive: pgtype.Int4{rr.TTL, true},
+		TimeToLive: pgtype.Int4{Int32: rr.TTL, Valid: true},
 	})
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (repo Postgres) DeleteRecord(ctx context.Context, id int32) error {
 
 // FindRecords return resource records with provided domain name and type.
 func (repo Postgres) FindRecords(ctx context.Context, name, rrType string) ([]ResourceRecord, error) {
-	rrs, err := repo.db.GetResourceRecords(ctx, sqlc.GetResourceRecordsParams{name, rrType})
+	rrs, err := repo.db.GetResourceRecords(ctx, sqlc.GetResourceRecordsParams{Domain: name, Type: rrType})
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +209,11 @@ func (repo Postgres) UpdateUser(ctx context.Context, user User, password string)
 // AddUser add user in the database and return this user with settled ID.
 func (repo Postgres) AddUser(ctx context.Context, user User, password string) (int32, error) {
 	if len(user.FirstName) < 2 {
-		return 0, fmt.Errorf("can't use name %s, the length less than 2")
+		return 0, fmt.Errorf("can't use name %s, the length less than 2", user.FirstName)
 	}
 
 	if len(user.LastName) < 2 {
-		return 0, fmt.Errorf("can't use last name %s, the length less than 2")
+		return 0, fmt.Errorf("can't use last name %s, the length less than 2", user.LastName)
 	}
 
 	if len(user.Role) < 4 {
