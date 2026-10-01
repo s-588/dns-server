@@ -1,3 +1,5 @@
+// Package cli provides a command-line interface for interacting with the DNS server.
+// It communicates with the server's HTTP API to perform CRUD operations on DNS records.
 package cli
 
 import (
@@ -9,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +20,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/prionis/dns-server/internal/database"
 	"github.com/prionis/dns-server/internal/server"
-	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
+	"github.com/prionis/dns-server/proto/genproto/crudpb"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/charmbracelet/lipgloss"
@@ -33,6 +36,8 @@ var (
 			Bold(true)
 )
 
+// AddRR takes a DNS record in RFC 1035 format, marshals it into a protobuf message,
+// and sends it to the server's HTTP API to add the record to the database.
 func AddRR(arg string, addr, port string) {
 	rr, err := dns.NewRR(arg)
 	if err != nil {
@@ -42,14 +47,22 @@ func AddRR(arg string, addr, port string) {
 	s := strings.Split(rr.String(), " ")
 
 	body, err := proto.Marshal(&crudpb.ResourceRecord{
-		Domain:     s[0],
-		TimeToLive: int32(rr.Header().Ttl),
-		Class:      s[2],
-		Type:       s[3],
-		Data:       s[4],
+		Domain: s[0],
+		Ttl:    rr.Header().Ttl,
+		Class:  s[2],
+		Type:   s[3],
+		Data:   s[4],
 	})
+	if err != nil {
+		printError("can't marshal record: " + err.Error())
+		return
+	}
 
 	req, err := http.NewRequest(http.MethodPost, addr+port+"/api/rr", bytes.NewReader(body))
+	if err != nil {
+		printError("can't create request: " + err.Error())
+		return
+	}
 	req.Header.Add("Content-Type", "application/protobuf")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -69,6 +82,7 @@ func AddRR(arg string, addr, port string) {
 	}
 }
 
+// DelRR sends a delete request to the server's HTTP API to remove a DNS record by its ID.
 func DelRR(id int64, addr, port string) {
 	req, err := http.NewRequest(http.MethodDelete, addr+port+"/api/rr/"+strconv.FormatInt(id, 10), http.NoBody)
 	if err != nil {
@@ -78,7 +92,7 @@ func DelRR(id int64, addr, port string) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		printError("Can't make request to the server by addres: " + addr + port + ". Error: " + err.Error())
+		printError("Can't make request to the server by address: " + addr + port + ". Error: " + err.Error())
 		return
 	}
 
@@ -94,9 +108,10 @@ func DelRR(id int64, addr, port string) {
 	}
 }
 
-func StartServer(logPath string) {
+// StartServer initializes and starts the DNS and HTTP servers.
+func StartServer(logPath string, opts ...server.Option) {
 	server.LoadEnvs()
-	logFile, err := os.OpenFile(logPath, os.O_RDWR|os.O_CREATE, 0644)
+	logFile, err := os.OpenFile(filepath.Clean(logPath), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		printError("can't open log file\n" + err.Error())
 		return
@@ -115,10 +130,8 @@ func StartServer(logPath string) {
 	}
 	logger.Info("connection with database established")
 
-	config := []server.Option{
-		server.SetDNSPort(":53"),
-		server.WithDB(db),
-	}
+	config := append(server.OptionsFromEnv(), opts...)
+	config = append(config, server.WithDB(db))
 	s, err := server.NewServer(config...)
 	if err != nil {
 		printError(fmt.Sprintf("can't create new server\n%s", err.Error()))
@@ -138,8 +151,10 @@ type log struct {
 	Msg   string    `json:"msg"`
 }
 
+// PrintLogList reads a log file unmarshaling each line into a log struct,
+// and prints the formatted log entries to stdout.
 func PrintLogList(logPath string) {
-	file, err := os.Open(logPath)
+	file, err := os.Open(filepath.Clean(logPath))
 	if err != nil {
 		printError("can't open log file\n" + err.Error())
 		return
@@ -166,7 +181,10 @@ func PrintLogList(logPath string) {
 			if err != nil {
 				continue
 			}
-			fmt.Fprintf(os.Stdout, "%s %s %s\n", log.Time.Format(time.DateTime), log.Level, log.Msg)
+			_, err = fmt.Fprintf(os.Stdout, "%s %s %s\n", log.Time.Format(time.DateTime), log.Level, log.Msg)
+			if err != nil {
+				printError("can't write to stdout: " + err.Error())
+			}
 		}
 		wg.Done()
 	}(logChan)
@@ -174,6 +192,7 @@ func PrintLogList(logPath string) {
 	wg.Wait()
 }
 
+// PrintRRList sends a request to the server's HTTP API to retrieve all DNS records, and prints to stdout.
 func PrintRRList(addr, port string) {
 	req, err := http.NewRequest(http.MethodGet, "http://"+addr+port+"/api/rr/all", http.NoBody)
 	if err != nil {
@@ -193,7 +212,10 @@ func PrintRRList(addr, port string) {
 	if err != nil {
 		printError("can't read response body: " + err.Error())
 	}
-	proto.Unmarshal(body, rrs)
+	err = proto.Unmarshal(body, rrs)
+	if err != nil {
+		printError("can't unmarshal response body: " + err.Error())
+	}
 
 	if resp.StatusCode == http.StatusOK {
 		printSuccess("Record was added")
@@ -206,6 +228,7 @@ func PrintRRList(addr, port string) {
 	}
 }
 
+// CheckArgs checks the provided arguments to ensure that only one main action flag is used at a time.
 func CheckArgs(args ...any) {
 	count := 0
 	for _, arg := range args {

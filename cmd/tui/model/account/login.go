@@ -1,3 +1,4 @@
+// Package account provides a model for the login page of the TUI application.
 package account
 
 import (
@@ -13,6 +14,7 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )
 
+// LoginModel represents the state and behavior of the login page in the TUI application.
 type LoginModel struct {
 	// Width and height of the screen.
 	width, height int
@@ -31,7 +33,7 @@ type LoginModel struct {
 	transport *transport.Transport
 }
 
-// Create new login model.
+// NewLoginModel creates a new login model.
 func NewLoginModel(t *transport.Transport, w, h int) LoginModel {
 	inputs := make([]textinput.Model, 0, 2)
 
@@ -57,46 +59,19 @@ func NewLoginModel(t *transport.Transport, w, h int) LoginModel {
 	}
 }
 
+// Init initializes the model.
 func (dm LoginModel) Init() tea.Cmd {
 	return nil
 }
 
-// Handle messages that comming from the user interactions.
+// Update handles messages that coming from the user interactions.
 func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
-		case "up", "shift+tab":
-			if !m.focusButtons {
-				if m.focusIndex > 0 {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusIndex--
-					m.inputFields[m.focusIndex].Focus()
-				}
-			} else {
-				m.focusButtons = false
-				m.focusIndex = len(m.inputFields) - 1
-				m.inputFields[len(m.inputFields)-1].Focus()
-			}
-
-		case "down", "tab":
-			if !m.focusButtons {
-				if m.focusIndex < len(m.inputFields)-1 {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusIndex++
-					m.inputFields[m.focusIndex].Focus()
-				} else {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusButtons = true
-					m.cursor = 0
-				}
-			} else {
-				m.focusButtons = false
-				m.focusIndex = 0
-				m.inputFields[0].Focus()
-			}
+		case "up", "shift+tab", "down", "tab":
+			m = processVerticals(m, msg.String())
 		case "left":
 			if m.focusButtons && m.cursor > 0 {
 				m.cursor--
@@ -110,35 +85,9 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return LoginCancelMsg{}
 			}
 		case "enter", " ":
-			if m.focusButtons {
-				if m.cursor == 0 { // Yes button
-					login := m.inputFields[0].Value()
-					password := m.inputFields[1].Value()
-
-					user, err := m.login(login, password)
-					if err != nil {
-						return m, popup.Error(fmt.Sprintf("can't login: %v", err), "")
-					}
-
-					return m, tea.Batch(
-						popup.Success(fmt.Sprintf("Hi %s %s!", user.FirstName, user.LastName), ""),
-						func() tea.Msg {
-							return LoginSuccessMsg{
-								User: user,
-							}
-						},
-					)
-
-				} else { // No button
-					return m, func() tea.Msg {
-						return LoginCancelMsg{}
-					}
-				}
-			} else {
-				var cmd tea.Cmd
-				m.inputFields[m.focusIndex], cmd = m.inputFields[m.focusIndex].Update(msg)
-				cmds = append(cmds, cmd)
-			}
+			var cmd tea.Cmd
+			m, cmd = processEnter(m, msg)
+			cmds = append(cmds, cmd)
 		default:
 			if !m.focusButtons {
 				var cmd tea.Cmd
@@ -148,6 +97,72 @@ func (m LoginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, tea.Batch(cmds...)
+}
+
+func processVerticals(m LoginModel, button string) LoginModel {
+	switch button {
+	case "up", "shift+tab":
+		if !m.focusButtons {
+			if m.focusIndex > 0 {
+				m.inputFields[m.focusIndex].Blur()
+				m.focusIndex--
+				m.inputFields[m.focusIndex].Focus()
+			}
+		} else {
+			m.focusButtons = false
+			m.focusIndex = len(m.inputFields) - 1
+			m.inputFields[len(m.inputFields)-1].Focus()
+		}
+
+	case "down", "tab":
+		if !m.focusButtons {
+			if m.focusIndex < len(m.inputFields)-1 {
+				m.inputFields[m.focusIndex].Blur()
+				m.focusIndex++
+				m.inputFields[m.focusIndex].Focus()
+			} else {
+				m.inputFields[m.focusIndex].Blur()
+				m.focusButtons = true
+				m.cursor = 0
+			}
+		} else {
+			m.focusButtons = false
+			m.focusIndex = 0
+			m.inputFields[0].Focus()
+		}
+	}
+	return m
+}
+
+func processEnter(m LoginModel, msg tea.KeyMsg) (LoginModel, tea.Cmd) {
+	if m.focusButtons {
+		if m.cursor == 0 { // Yes button
+			login := m.inputFields[0].Value()
+			password := m.inputFields[1].Value()
+
+			user, err := m.login(login, password)
+			if err != nil {
+				return m, popup.Error(fmt.Sprintf("can't login: %v", err), "")
+			}
+
+			return m, tea.Batch(
+				popup.Success(fmt.Sprintf("Hi %s %s!", user.FirstName, user.LastName), ""),
+				func() tea.Msg {
+					return LoginSuccessMsg{
+						User: user,
+					}
+				},
+			)
+
+		} else { // No button
+			return m, func() tea.Msg {
+				return LoginCancelMsg{}
+			}
+		}
+	}
+	var cmd tea.Cmd
+	m.inputFields[m.focusIndex], cmd = m.inputFields[m.focusIndex].Update(msg)
+	return m, cmd
 }
 
 func (m LoginModel) login(login, password string) (*structs.User, error) {
@@ -163,7 +178,7 @@ func (m LoginModel) login(login, password string) (*structs.User, error) {
 	}, nil
 }
 
-// Render page on the screen.
+// View renders page on the screen.
 func (m LoginModel) View() string {
 	s := strings.Builder{}
 	s.WriteString("\n")
@@ -196,8 +211,10 @@ func (m LoginModel) View() string {
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
+// LoginSuccessMsg is a message that is sent when the user successfully logs in.
 type LoginSuccessMsg struct {
 	User *structs.User
 }
 
+// LoginCancelMsg is a message that is sent when the user cancels the login process.
 type LoginCancelMsg struct{}

@@ -4,6 +4,7 @@ package dns
 
 import (
 	"bytes"
+	"math"
 	"net/netip"
 	"reflect"
 	"testing"
@@ -40,12 +41,19 @@ func Test_RR_RoundTrip(t *testing.T) {
 		IP: netip.MustParseAddr("240.99.18.23"),
 	}
 	b, err := a.MarshalBinary()
+	if err != nil {
+		t.Fatalf("error was not expected: %s", err)
+	}
+	l := len(b)
+	if l < 0 || l > math.MaxUint16 {
+		t.Fatalf("len(b) wasn't expected to be more than uint16: %d", l)
+	}
 	rr := RR{
 		Name:     "example.com",
 		Type:     TypeA,
 		Class:    ClassIN,
 		TTL:      88,
-		RDLength: uint16(len(b)),
+		RDLength: uint16(l),
 		RData:    a,
 	}
 	if err != nil {
@@ -73,12 +81,17 @@ func TestMessage_BinaryRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error was not expected: %s", err)
 	}
+	l := len(b)
+	if l < 0 || l > math.MaxUint16 {
+		t.Fatalf("len(b) wasn't expected to be more than uint16: %d", l)
+	}
+
 	rr := RR{
 		Name:     "example.com",
 		Type:     TypeA,
 		Class:    ClassIN,
 		TTL:      88,
-		RDLength: uint16(len(b)),
+		RDLength: uint16(l),
 		RData:    a,
 	}
 	m := &Message{

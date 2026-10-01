@@ -1,3 +1,4 @@
+// Package server provides the implementation of the HTTP and DNS server.
 package server
 
 import (
@@ -23,16 +24,17 @@ var (
 	userRights  = []string{"user", "admin"}
 )
 
+// Server represents the DNS and HTTP server.
 type Server struct {
 	dnsPort  string
 	httpPort string
+	https    bool
 	db       database.Repository
 	metrics  *Metrics
 }
 
+// NewServer creates a new Server instance with the provided options.
 func NewServer(opts ...Option) (Server, error) {
-	s := Server{}
-
 	conf := options{
 		dnsPort:  ":53",
 		httpPort: ":8083",
@@ -41,15 +43,17 @@ func NewServer(opts ...Option) (Server, error) {
 		opt.apply(&conf)
 	}
 
-	s = Server{
+	s := Server{
 		dnsPort:  conf.dnsPort,
-		httpPort: ":8083",
+		httpPort: conf.httpPort,
 		db:       conf.db,
 		metrics:  NewMetrics(),
+		https:    conf.https,
 	}
 	return s, nil
 }
 
+// Start starts the DNS and HTTP servers and listens for incoming requests.
 func (s Server) Start(ws *WebSocket) error {
 	_, err := s.db.GetUser(context.Background(), "admin")
 	if err != nil {
@@ -77,7 +81,7 @@ func (s Server) Start(ws *WebSocket) error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-signals
-	slog.Info("Signal(" + sig.String() + ") recived, terminating")
+	slog.Info("Signal(" + sig.String() + ") received, terminating")
 	return nil
 }
 
@@ -129,7 +133,10 @@ func (s Server) serveHTTP(ws *WebSocket) {
 	}
 
 	slog.Info("server listen HTTP requests on " + s.httpPort)
-	server.ListenAndServe()
+	err := server.ListenAndServe()
+	if err != nil {
+		slog.Error("can't start HTTP server: " + err.Error())
+	}
 }
 
 func (s *Server) serveUDP() {
@@ -143,7 +150,12 @@ func (s *Server) serveUDP() {
 		slog.Error("listen UDP", "error", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			slog.Error("can't close UDP connection", "error", err)
+		}
+	}()
 
 	buf := make([]byte, 512)
 	for {
@@ -155,7 +167,10 @@ func (s *Server) serveUDP() {
 		go func(data []byte, addr *net.UDPAddr) {
 			resp := s.dnsHandler(data)
 			if resp != nil {
-				conn.WriteToUDP(resp, addr)
+				_, err := conn.WriteToUDP(resp, addr)
+				if err != nil {
+					slog.Error("can't write response for UDP client: " + err.Error())
+				}
 			}
 		}(append([]byte(nil), buf[:n]...), clientAddr)
 	}
@@ -172,7 +187,12 @@ func (s *Server) serveTCP() {
 		slog.Error("listen TCP", "error", err)
 		return
 	}
-	defer listener.Close()
+	defer func() {
+		err := listener.Close()
+		if err != nil {
+			slog.Error("can't close TCP listener", "error", err)
+		}
+	}()
 
 	buf := make([]byte, 512)
 	for {
@@ -188,7 +208,10 @@ func (s *Server) serveTCP() {
 			}
 			resp := s.dnsHandler(append([]byte(nil), buf...))
 			if resp != nil {
-				conn.Write(resp)
+				_, err := conn.Write(resp)
+				if err != nil {
+					slog.Error("can't write response for TCP client: " + err.Error())
+				}
 			}
 		}(conn)
 	}

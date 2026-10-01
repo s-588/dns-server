@@ -15,8 +15,8 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )
 
-func NewDescriptor(w, h int) table.TableDescriptor {
-	return table.TableDescriptor{
+func NewDescriptor(w, h int) table.Descriptor {
+	return table.Descriptor{
 		Columns:      GetColumns(w),
 		RefreshFn:    RefreshFn,
 		FilterFn:     FilterFn,
@@ -38,13 +38,13 @@ func RefreshFn(t *transport.Transport) ([]bubbleTable.Row, error) {
 	rows := make([]bubbleTable.Row, len(users))
 
 	for i, u := range users {
-		rows[i] = []string{strconv.FormatInt(int64(u.ID), 10), u.Login, u.FirstName, u.LastName, u.Role}
+		rows[i] = []string{strconv.FormatInt(u.ID, 10), u.Login, u.FirstName, u.LastName, u.Role}
 	}
 
 	return rows, nil
 }
 
-func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int32) (bubbleTable.Row, error) {
+func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int64) (bubbleTable.Row, error) {
 	for i := range inputs {
 		if inputs[i].Validate != nil {
 			err := inputs[i].Validate(inputs[i].Value())
@@ -75,7 +75,7 @@ func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int32) (bubbl
 		return nil, err
 	}
 
-	return []string{strconv.FormatInt(int64(id), 10), login, fname, lname, role}, nil
+	return []string{strconv.FormatInt(id, 10), login, fname, lname, role}, nil
 }
 
 func GetColumns(w int) []bubbleTable.Column {
@@ -103,7 +103,7 @@ func GetColumns(w int) []bubbleTable.Column {
 	}
 }
 
-func DeleteFn(t *transport.Transport, id int32) error {
+func DeleteFn(t *transport.Transport, id int64) error {
 	return t.DeleteUser(id)
 }
 
@@ -143,7 +143,7 @@ func AddFn(t *transport.Transport, inputs []textinput.Model) (bubbleTable.Row, e
 		Password:  password,
 	})
 	return bubbleTable.Row{
-		strconv.FormatInt(int64(user.ID), 10),
+		strconv.FormatInt(user.ID, 10),
 		user.Login, user.FirstName, user.LastName, user.Role,
 	}, err
 }
@@ -155,97 +155,127 @@ func GetInputFields(width int) []textinput.Model {
 		input.Width = width / 3
 		switch i {
 		case 0:
-			input.Placeholder = "Login"
-			input.Validate = func(s string) error {
-				if len(s) < 5 {
-					return errors.New("login is too short, must be at least 5 symbols")
-				}
-				if len(s) > 16 {
-					return errors.New("login is too long, must less than 16 symbols")
-				}
-				if strings.ContainsAny(s, "._/\\^?!%+[{(&=)}]*") {
-					return errors.New("login must not contain any special characters")
-				}
-				return nil
-			}
-			input.Focus()
+			input = setupLoginInput(input)
 		case 1:
-			input.Placeholder = "First name"
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("first name must be filled")
-				}
-				if strings.ContainsAny(s, "1234567890+[{(&=)}]*!/-|`_?%^#@\\") {
-					return errors.New("first name can't contain any numbers or special symbols")
-				}
-				return nil
-			}
+			input = setupFirstNameInput(input)
 		case 2:
-			input.Placeholder = "Last name"
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("last name must be filled")
-				}
-				if strings.ContainsAny(s, "1234567890+[{(&=)}]*!/-|`_?%^#@\\") {
-					return errors.New("last name can't contain any numbers or special symbols")
-				}
-				return nil
-			}
+			input = setupLastNameInput(input)
 		case 3:
-			input.Placeholder = "Role"
-			input.ShowSuggestions = true
-			input.SetSuggestions([]string{"admin", "user"})
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("role must be filled")
-				}
-				if strings.ContainsAny(s, "1234567890+[{(&=)}]*!/-|`_?%^#@\\") {
-					return errors.New("role can't contain any numbers or special symbols")
-				}
-				return nil
-			}
+			input = setupRoleInput(input)
 		case 4:
-			input.Placeholder = "Password"
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("password must be filled")
-				}
-				if len(s) < 6 {
-					return errors.New("password is too short, password must be atleast 6 characters")
-				}
-				if len(s) > 72 {
-					return errors.New("password is too long")
-				}
-				if !strings.ContainsAny(s, "123456789") {
-					return errors.New("password must contain atleast one number")
-				}
-				return nil
-			}
-			input.EchoMode = textinput.EchoPassword
-			input.EchoCharacter = '*'
+			input = setupPasswordInput(input)
 		case 5:
-			input.Placeholder = "Repeat password"
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("password must be filled")
-				}
-				if len(s) < 6 {
-					return errors.New("password is too short, password must be atleast 6 characters")
-				}
-				if len(s) > 72 {
-					return errors.New("password is too long")
-				}
-				if !strings.ContainsAny(s, "123456789") {
-					return errors.New("password must contain atleast one number")
-				}
-				return nil
-			}
-			input.EchoMode = textinput.EchoPassword
-			input.EchoCharacter = '*'
+			input = setupRepeatPassInput(input)
 		}
 		inputs[i] = input
 	}
 	return inputs
+}
+
+func setupRepeatPassInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "Repeat password"
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("password must be filled")
+		}
+		if len(s) < 6 {
+			return errors.New("password is too short, password must be atleast 6 characters")
+		}
+		if len(s) > 72 {
+			return errors.New("password is too long")
+		}
+		if !strings.ContainsAny(s, "123456789") {
+			return errors.New("password must contain atleast one number")
+		}
+		return nil
+	}
+	input.EchoMode = textinput.EchoPassword
+	input.EchoCharacter = '*'
+	return input
+}
+
+func setupPasswordInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "Password"
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("password must be filled")
+		}
+		if len(s) < 6 {
+			return errors.New("password is too short, password must be atleast 6 characters")
+		}
+		if len(s) > 72 {
+			return errors.New("password is too long")
+		}
+		if !strings.ContainsAny(s, "123456789") {
+			return errors.New("password must contain atleast one number")
+		}
+		return nil
+	}
+	input.EchoMode = textinput.EchoPassword
+	input.EchoCharacter = '*'
+	return input
+}
+
+func setupRoleInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "Role"
+	input.ShowSuggestions = true
+	input.SetSuggestions([]string{"admin", "user"})
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("role must be filled")
+		}
+		if strings.ContainsAny(s, "1234567890+[{(&=)}]*!/-|`_?%^#@\\") {
+			return errors.New("role can't contain any numbers or special symbols")
+		}
+		return nil
+	}
+	return input
+}
+
+func setupLastNameInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "Last name"
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("last name must be filled")
+		}
+		if strings.ContainsAny(s, "1234567890+[{(&=)}]*!/-|`_?%^#@\\") {
+			return errors.New("last name can't contain any numbers or special symbols")
+		}
+		return nil
+	}
+	return input
+}
+
+func setupFirstNameInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "First name"
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("first name must be filled")
+		}
+		if strings.ContainsAny(s, "1234567890+[{(&=)}]*!/-|`_?%^#@\\") {
+			return errors.New("first name can't contain any numbers or special symbols")
+		}
+		return nil
+	}
+	return input
+}
+
+func setupLoginInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "Login"
+	input.Validate = func(s string) error {
+		if len(s) < 5 {
+			return errors.New("login is too short, must be at least 5 symbols")
+		}
+		if len(s) > 16 {
+			return errors.New("login is too long, must less than 16 symbols")
+		}
+		if strings.ContainsAny(s, "._/\\^?!%+[{(&=)}]*") {
+			return errors.New("login must not contain any special characters")
+		}
+		return nil
+	}
+	input.Focus()
+	return input
 }
 
 func GetFilteredFields(width int) []textinput.Model {
@@ -295,13 +325,13 @@ func SortFn(index int, r []bubbleTable.Row, asc bool) []bubbleTable.Row {
 		if asc {
 			return strings.ToLower(r[i][index]) > strings.ToLower(r[j][index])
 		} else {
-			return !(strings.ToLower(r[i][index]) > strings.ToLower(r[j][index]))
+			return strings.ToLower(r[i][index]) <= strings.ToLower(r[j][index])
 		}
 	})
 	return r
 }
 
-func userButtonsHandler(index int, m table.TableModel) (table.TableModel, tea.Cmd) {
+func userButtonsHandler(index int, m table.Model) (table.Model, tea.Cmd) {
 	switch index {
 	case 0: // View
 		m.Table.Focus()
@@ -346,14 +376,14 @@ func userButtonsHandler(index int, m table.TableModel) (table.TableModel, tea.Cm
 	return m, nil
 }
 
-func New(t *transport.Transport, w, h int) (table.TableModel, error) {
+func New(t *transport.Transport, w, h int) (table.Model, error) {
 	users, err := t.GetAllUsers()
 	if err != nil {
-		return table.TableModel{}, nil
+		return table.Model{}, nil
 	}
 	rows := make([]bubbleTable.Row, 0, len(users))
 	for _, u := range users {
-		rows = append(rows, bubbleTable.Row{strconv.FormatInt(int64(u.ID), 10), u.Login, u.FirstName, u.LastName, u.Role})
+		rows = append(rows, bubbleTable.Row{strconv.FormatInt(u.ID, 10), u.Login, u.FirstName, u.LastName, u.Role})
 	}
 
 	buttons := []string{

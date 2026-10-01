@@ -1,10 +1,10 @@
+// Package table contain table model for TUI.
 package table
 
 import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
-	bubbleTable "github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,7 +12,8 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )
 
-type TableDescriptor struct {
+// Descriptor describes the logical structure of a table.
+type Descriptor struct {
 	Columns []table.Column
 
 	RefreshFn func(t *transport.Transport) ([]table.Row, error)
@@ -25,37 +26,38 @@ type TableDescriptor struct {
 	SortAscending bool
 
 	SearchFn func(query string, rows []table.Row) []table.Row
-	DeleteFn func(t *transport.Transport, id int32) error
+	DeleteFn func(t *transport.Transport, id int64) error
 
 	AddFn        func(t *transport.Transport, inputs []textinput.Model) (table.Row, error)
 	InputFields  []textinput.Model
-	UpdateFn     func(t *transport.Transport, inputs []textinput.Model, id int32) (table.Row, error)
+	UpdateFn     func(t *transport.Transport, inputs []textinput.Model, id int64) (table.Row, error)
 	UpdateFields []textinput.Model
 }
 
-type TableModel struct {
+// Model represents the state of a table.
+type Model struct {
 	Header string
 	// Width and height of the screen.
 	width, height int
 
 	Buttons    []string
-	Descriptor TableDescriptor
+	Descriptor Descriptor
 	// Selected button.
 	cursor        int
-	onButtonPress func(index int, table TableModel) (TableModel, tea.Cmd)
+	onButtonPress func(index int, table Model) (Model, tea.Cmd)
 
 	Table         table.Model
 	UnchangedRows []table.Row
 }
 
-// Create new add model.
-func NewModel(descriptor TableDescriptor,
+// NewModel creates a new table model.
+func NewModel(descriptor Descriptor,
 	width, height int,
 	buttons []string, rows []table.Row,
-	buttonHandler func(int, TableModel) (TableModel, tea.Cmd),
+	buttonHandler func(int, Model) (Model, tea.Cmd),
 	header string,
-) TableModel {
-	t := table.New(table.WithColumns(descriptor.Columns), table.WithRows(rows), bubbleTable.WithHeight(height-20))
+) Model {
+	t := table.New(table.WithColumns(descriptor.Columns), table.WithRows(rows), table.WithHeight(height-20))
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -67,7 +69,7 @@ func NewModel(descriptor TableDescriptor,
 		Background(style.PurpleColor).
 		Bold(true)
 	t.SetStyles(s)
-	return TableModel{
+	return Model{
 		Header:        header,
 		width:         width,
 		height:        height,
@@ -79,31 +81,21 @@ func NewModel(descriptor TableDescriptor,
 	}
 }
 
-func (dm TableModel) Init() tea.Cmd {
+// Init initialize TableModel.
+func (dm Model) Init() tea.Cmd {
 	return nil
 }
 
-// Handle messages that comming from the user interactions.
-func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update handles messages that coming from the user interactions.
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
-		case "up", "shift+tab", "k":
-			if m.Table.Focused() {
-				m.Table, cmd = m.Table.Update(msg)
-				cmds = append(cmds, cmd)
-			}
-
-		case "down", "tab", "j":
-			if !m.Table.Focused() {
-				m.Table.Focus()
-			} else {
-				m.Table, cmd = m.Table.Update(msg)
-				cmds = append(cmds, cmd)
-			}
+		case "up", "shift+tab", "k", "down", "tab", "j":
+			m, cmd = processVerticalMoves(m, cmd, msg.String())
+			cmds = append(cmds, cmd)
 
 		case "left", "h":
 			if !m.Table.Focused() && m.cursor > 0 {
@@ -142,8 +134,25 @@ func (m TableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// Render page on the screen.
-func (m TableModel) View() string {
+func processVerticalMoves(m Model, cmd tea.Cmd, button string) (Model, tea.Cmd) {
+	switch button {
+	case "up", "shift+tab", "k":
+		if m.Table.Focused() {
+			m.Table, cmd = m.Table.Update(button)
+		}
+	case "down", "tab", "j":
+
+		if !m.Table.Focused() {
+			m.Table.Focus()
+		} else {
+			m.Table, cmd = m.Table.Update(button)
+		}
+	}
+	return m, cmd
+}
+
+// View renders page on the screen.
+func (m Model) View() string {
 	s := strings.Builder{}
 
 	styledButtons := make([]string, len(m.Buttons))
@@ -171,12 +180,13 @@ func (m TableModel) View() string {
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
-func (m TableModel) UpdateSize(w, h int) TableModel {
+// UpdateSize set w and h to width and height of a Model.
+func (m Model) UpdateSize(w, h int) Model {
 	m.width, m.height = w, h
 	return m
 }
 
-func (m TableModel) UpdateRow(index int32, row bubbleTable.Row) TableModel {
+func (m Model) UpdateRow(index int64, row table.Row) Model {
 	rows := m.Table.Rows()
 	rows[index] = row
 	m.Table.SetRows(rows)

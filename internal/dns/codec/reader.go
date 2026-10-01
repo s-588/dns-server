@@ -1,3 +1,4 @@
+// Package codec package contains utilities for encoding and decoding DNS messages, including support for name compression.
 package codec
 
 import (
@@ -8,17 +9,20 @@ import (
 	"strings"
 )
 
+// Reader is a utility for reading DNS messages with support for name compression.
 type Reader struct {
-	data []byte
-	pos  int
+	data []byte // underlying buffer
+	pos  int    // current read position
 }
 
+// NewReader creates a new Reader for the given data.
 func NewReader(data []byte) *Reader {
 	return &Reader{
 		data: data,
 	}
 }
 
+// Uint8 reads a uint8 value from the Reader's buffer.
 func (r *Reader) Uint8() (uint8, error) {
 	if r.pos >= len(r.data) {
 		return 0, io.ErrUnexpectedEOF
@@ -30,6 +34,7 @@ func (r *Reader) Uint8() (uint8, error) {
 	return v, nil
 }
 
+// Uint16 reads a uint16 value from the Reader's buffer in big-endian order.
 func (r *Reader) Uint16() (uint16, error) {
 	if len(r.data)-r.pos < 2 {
 		return 0, io.ErrUnexpectedEOF
@@ -42,6 +47,7 @@ func (r *Reader) Uint16() (uint16, error) {
 	return v, nil
 }
 
+// Uint32 reads a uint32 value from the Reader's buffer in big-endian order.
 func (r *Reader) Uint32() (uint32, error) {
 	if len(r.data)-r.pos < 4 {
 		return 0, io.ErrUnexpectedEOF
@@ -53,6 +59,8 @@ func (r *Reader) Uint32() (uint32, error) {
 
 	return v, nil
 }
+
+// Bytes reads n bytes from the Reader's buffer.
 func (r *Reader) Bytes(n int) ([]byte, error) {
 	if n < 0 {
 		return nil, errors.New("negative length")
@@ -69,6 +77,7 @@ func (r *Reader) Bytes(n int) ([]byte, error) {
 	return b, nil
 }
 
+// ReadName reads a domain name from the buffer, handling DNS name compression.
 func (r *Reader) ReadName() (string, error) {
 	var labels []string
 

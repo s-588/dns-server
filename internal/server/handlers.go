@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,7 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/prionis/dns-server/internal/database"
 	"github.com/prionis/dns-server/internal/dns"
-	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
+	"github.com/prionis/dns-server/proto/genproto/crudpb"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -53,34 +55,10 @@ func (s Server) dnsHandler(msg []byte) []byte {
 			slog.Warn("domain not found", "name", q.Name, "type", q.Type)
 		}
 		for _, a := range answers {
-			t, ok := dns.ParseType(a.Type)
-			if !ok {
-				slog.Error("uknown type", "domain", a.Domain, "type", a.Type)
-				continue
-			}
-			c, ok := dns.ParseClass(a.Class)
-			if !ok {
-				slog.Error("uknown class", "domain", a.Domain, "class", a.Class)
-				continue
-			}
-			rdata, err := dns.ParseRData(t, a.Data)
+			rr, err := parseRR(a)
 			if err != nil {
-				slog.Error("can't parse RDATA", "domain", a.Domain, "type", a.Type, "data", a.Data)
+				slog.Error("can't parse resource record", "error", err)
 				continue
-			}
-			respData, err := rdata.MarshalBinary()
-			if err != nil {
-				slog.Error("can't marshal RDATA", "domain", a.Domain, "type", a.Type, "rdata", rdata)
-				continue
-			}
-
-			rr := dns.RR{
-				Name:     a.Domain,
-				Type:     t,
-				Class:    c,
-				TTL:      uint32(a.TTL),
-				RDLength: uint16(len(respData)),
-				RData:    rdata,
 			}
 			slog.Info("found answer", "RR", rr)
 			req.Answers = append(req.Answers, rr)
@@ -96,8 +74,19 @@ func (s Server) dnsHandler(msg []byte) []byte {
 			Observe(time.Since(start).Seconds())
 	}
 
-	resp.Header.QDCount = uint16(len(resp.Questions))
-	resp.Header.ANCount = uint16(len(resp.Answers))
+	l := len(req.Questions)
+	if l < 0 || l > math.MaxUint16 {
+		slog.Error("too many questions, setting to max", "count", l)
+		l = math.MaxUint16
+	}
+	resp.Header.QDCount = uint16(l)
+
+	l = len(req.Answers)
+	if l < 0 || l > math.MaxUint16 {
+		slog.Error("too many answers, setting to max", "count", l)
+		l = math.MaxUint16
+	}
+	resp.Header.ANCount = uint16(l)
 
 	out, err := resp.MarshalBinary()
 	if err != nil {
@@ -107,55 +96,91 @@ func (s Server) dnsHandler(msg []byte) []byte {
 	return out
 }
 
-// loginHandler handle login requests, accept user credentials, process and add jwt token to the response.
-func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
-	credentials := &crudpb.Login{}
+func parseRR(a database.ResourceRecord) (dns.RR, error) {
+	t, ok := dns.ParseType(a.Type)
+	if !ok {
+		slog.Error("uknown type", "domain", a.Domain, "type", a.Type)
+		return dns.RR{}, fmt.Errorf("unknown type: %s", a.Type)
+	}
+	c, ok := dns.ParseClass(a.Class)
+	if !ok {
+		slog.Error("uknown class", "domain", a.Domain, "class", a.Class)
+		return dns.RR{}, fmt.Errorf("unknown class: %s", a.Class)
+	}
+	rdata, err := dns.ParseRData(t, a.Data)
+	if err != nil {
+		slog.Error("can't parse RDATA", "domain", a.Domain, "type", a.Type, "data", a.Data)
+		return dns.RR{}, fmt.Errorf("can't parse RDATA: %w", err)
+	}
+	respData, err := rdata.MarshalBinary()
+	if err != nil {
+		slog.Error("can't marshal RDATA", "domain", a.Domain, "type", a.Type, "rdata", rdata)
+		return dns.RR{}, fmt.Errorf("can't marshal RDATA: %w", err)
+	}
+	l := len(respData)
+	if l < 0 || l > math.MaxUint16 {
+		slog.Error("length of RDATA is too big", "domain", a.Domain, "type", a.Type, "length", l)
+		return dns.RR{}, fmt.Errorf("length of RDATA is too big: %d", l)
+	}
 
+	rr := dns.RR{
+		Name:     a.Domain,
+		Type:     t,
+		Class:    c,
+		TTL:      a.TTL,
+		RDLength: uint16(l),
+		RData:    rdata,
+	}
+	return rr, nil
+}
+
+func (s Server) parseLoginRequest(r *http.Request) (*crudpb.Login, error) {
 	if r.Header.Get("Content-Type") != "application/protobuf" {
-		slog.Error("Content-Type header is set to " + r.Header.Get("Content-Type"))
-		http.Error(w, "Accept only application/protobuf Content-Type", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("unsupported content type")
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("can't read request body from " + r.RemoteAddr)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("can't read request body: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			slog.Error("can't close request body", "addr", r.RemoteAddr)
+		}
+	}()
 
+	credentials := &crudpb.Login{}
 	err = proto.Unmarshal(body, credentials)
 	if err != nil {
-		slog.Error("can't unmarshal body from " + r.RemoteAddr)
-		http.Error(w, "Incorrect message format", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("can't unmarshal body: %w", err)
 	}
 
-	user, err := s.db.CheckUserPassword(r.Context(), credentials.Username, credentials.Password)
-	if err != nil {
-		slog.Error("invalid login attempt for user " + credentials.GetUsername() + ": " + err.Error())
+	return credentials, nil
+}
 
+func (s Server) authenticate(ctx context.Context, credentials *crudpb.Login) (database.User, error) {
+	user, err := s.db.CheckUserPassword(ctx, credentials.Username, credentials.Password)
+	if err != nil {
 		var pgErr *pgconn.PgError
-		var errStr string
 		if errors.As(err, &pgErr) {
-			errStr = "User not found"
 			s.metrics.LoginAttemptsTotal.WithLabelValues("invalid_user").Inc()
-			http.Error(w, errStr, http.StatusForbidden)
-			return
+			return database.User{}, fmt.Errorf("user not found")
 		}
 
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			errStr = "Incorrect password"
 			s.metrics.LoginAttemptsTotal.WithLabelValues("wrong_password").Inc()
-			http.Error(w, errStr, http.StatusForbidden)
-			return
+			return database.User{}, fmt.Errorf("incorrect password")
 		}
 
-		http.Error(w, "Something went wrong", http.StatusInternalServerError)
-		return
+		return database.User{}, fmt.Errorf("something went wrong")
 	}
 
+	return user, nil
+}
+
+// setJWTToken generates a JWT token for the authenticated user and sets it as a cookie in the response.
+func (s Server) setJWTToken(w http.ResponseWriter, user database.User) error {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"id":         user.ID,
 		"login":      user.Login,
@@ -166,27 +191,49 @@ func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		slog.Error("JWT_SECRET environment variable is not set")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("JWT_SECRET environment variable is not set")
 	}
 
 	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
-		slog.Error("can't sign new JWT token for user " + user.Login + ": " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("can't sign new JWT token")
 	}
 
-	cookie := http.Cookie{
+	// gosec is disabled because it gives warning over https being false.
+	cookie := http.Cookie{ // #nosec G124
 		Name:     "jwt",
 		Value:    tokenString,
 		Path:     "/",
 		HttpOnly: true,
 		MaxAge:   14 * 24 * 60 * 60,
 		SameSite: http.SameSiteStrictMode,
+		Secure:   s.https,
 	}
 	http.SetCookie(w, &cookie)
+	return nil
+}
+
+// loginHandler handle login requests, accept user credentials, process and add jwt token to the response.
+func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
+	credentials, err := s.parseLoginRequest(r)
+	if err != nil {
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.authenticate(r.Context(), credentials)
+	if err != nil {
+		slog.Error("authentication failed", "error", err)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	err = s.setJWTToken(w, user)
+	if err != nil {
+		slog.Error("can't set JWT token", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	u := &crudpb.User{
 		Id:        user.ID,
@@ -196,12 +243,23 @@ func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 		Role:      user.Role,
 	}
 	b, err := proto.Marshal(u)
+	if err != nil {
+		slog.Error("can't marshal user message: " + err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
-	w.Write(b)
-	slog.Info(fmt.Sprintf("Login for %s %s %s(%s) handled",
-		user.Role, user.FirstName, user.LastName, user.Login))
+	_, err = w.Write(b)
+	if err != nil {
+		slog.Error("can't write response for user " + user.Login + ": " + err.Error())
+	}
+	slog.Info("User login",
+		"role", user.Role,
+		"firstName", user.FirstName,
+		"lastName", user.LastName,
+		"login", user.Login)
 	s.metrics.LoginAttemptsTotal.WithLabelValues("success").Inc()
 }
 
@@ -210,22 +268,27 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 	credentials := &crudpb.Register{}
 
 	if r.Header.Get("Content-Type") != "application/protobuf" {
-		slog.Error("Content-Type header is set to " + r.Header.Get("Content-Type"))
+		slog.Error("Invalid Content-Type header", "value", r.Header.Get("Content-Type"))
 		http.Error(w, "Accept only application/protobuf Content-Type", http.StatusBadRequest)
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("can't read request body from " + r.RemoteAddr)
+		slog.Error("can't read request body", "addr", r.RemoteAddr, "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			slog.Error("can't close request body", "addr", r.RemoteAddr, "error", err)
+		}
+	}()
 
 	err = proto.Unmarshal(body, credentials)
 	if err != nil {
-		slog.Error("can't unmarshal body from " + r.RemoteAddr)
+		slog.Error("can't unmarshal body", "addr", r.RemoteAddr, "error", err)
 		http.Error(w, "Incorrect message format", http.StatusBadRequest)
 		return
 	}
@@ -238,9 +301,7 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 			Role:      credentials.Role,
 		}, credentials.Password)
 	if err != nil {
-		slog.Error("can't register new user " +
-			credentials.Login + ": " +
-			err.Error())
+		slog.Error("can't register new user", "login", credentials.Login, "error", err)
 		var pgErr *pgconn.PgError
 		var errStr string
 		if errors.As(err, &pgErr) {
@@ -267,12 +328,19 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		Role:      credentials.Role,
 	}
 	b, err := proto.Marshal(u)
+	if err != nil {
+		slog.Error("can't marshal user message: " + err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
-	w.Write(b)
-	slog.Info(fmt.Sprintf("Register new user: %s %s %s(%s)",
-		credentials.Role, credentials.FirstName, credentials.LastName, credentials.Login))
+	_, err = w.Write(b)
+	if err != nil {
+		slog.Error("can't write response for user", "login", credentials.Login, "error", err)
+	}
+	slog.Info("Register new user", "role", credentials.Role, "firstName", credentials.FirstName, "lastName", credentials.LastName, "login", credentials.Login)
 }
 
 // getRecordHandler handle get request for resource records.
@@ -286,30 +354,35 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idStr, 10, 32)
 	if err != nil {
-		slog.Error("can't parse id(" + idStr + ")")
+		slog.Error("can't parse id", "id", idStr, "error", err)
 	}
 
-	rr, err := s.db.GetRecord(r.Context(), int32(id))
+	rr, err := s.db.GetRecord(r.Context(), id)
 	if err != nil {
-		slog.Error("can't get user: " + err.Error())
+		slog.Error("can't get user", "id", id, "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	protoRR := &crudpb.ResourceRecord{
-		Id:         rr.ID,
-		Domain:     rr.Domain,
-		Data:       rr.Data,
-		Type:       rr.Type,
-		Class:      rr.Class,
-		TimeToLive: rr.TTL,
+		Id:     rr.ID,
+		Domain: rr.Domain,
+		Data:   rr.Data,
+		Type:   rr.Type,
+		Class:  rr.Class,
+		Ttl:    rr.TTL,
 	}
 	body, err := proto.Marshal(protoRR)
 	if err != nil {
-		slog.Error("can't marshal resource record message: " + err.Error())
+		slog.Error("can't marshal resource record message", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	_, err = w.Write(body)
+	if err != nil {
+		slog.Error("can't write response for resource record", "error", err)
+	}
 	slog.Info("GET resource record",
 		"Domain", rr.Domain,
 		"TTL", rr.TTL,
@@ -323,7 +396,7 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	rrs, err := s.db.GetAllRecords(r.Context())
 	if err != nil {
-		slog.Error("can't get records from databas: " + err.Error())
+		slog.Error("can't get records from database", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -331,25 +404,28 @@ func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	records := &crudpb.ResourceRecordCollection{}
 	for _, rr := range rrs {
 		records.Records = append(records.Records, &crudpb.ResourceRecord{
-			Id:         rr.ID,
-			Domain:     rr.Domain,
-			Data:       rr.Data,
-			Class:      rr.Class,
-			Type:       rr.Type,
-			TimeToLive: int32(rr.TTL),
+			Id:     rr.ID,
+			Domain: rr.Domain,
+			Data:   rr.Data,
+			Class:  rr.Class,
+			Type:   rr.Type,
+			Ttl:    rr.TTL,
 		})
 	}
 
 	resp, err := proto.Marshal(records)
 	if err != nil {
-		slog.Error("can't get records form databas: " + err.Error())
+		slog.Error("can't get records from database", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
-	w.Write(resp)
+	_, err = w.Write(resp)
+	if err != nil {
+		slog.Error("can't write response for resource records", "error", err)
+	}
 	slog.Info("GET all resource records, returned " +
 		strconv.FormatInt(int64(len(rrs)), 10) + " records")
 }
@@ -365,7 +441,7 @@ func (s Server) getUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.db.GetUser(r.Context(), id)
 	if err != nil {
-		slog.Error("can't get user: " + err.Error())
+		slog.Error("can't get user", "id", id, "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -377,18 +453,25 @@ func (s Server) getUserHandler(w http.ResponseWriter, r *http.Request) {
 		Role:      user.Role,
 	}
 	b, err := proto.Marshal(u)
+	if err != nil {
+		slog.Error("can't marshal user message", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(b)
-	slog.Info(fmt.Sprintf("GET user %s %s %s(%s)",
-		user.Role, user.FirstName, user.LastName, user.Login))
+	_, err = w.Write(b)
+	if err != nil {
+		slog.Error("can't write response for user", "login", user.Login, "error", err)
+	}
+	slog.Info("GET user", "role", user.Role, "firstName", user.FirstName, "lastName", user.LastName, "login", user.Login)
 }
 
 // getAllUsersHandler handle get requests and return all users.
 func (s Server) getAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := s.db.GetAllUsers(r.Context())
 	if err != nil {
-		slog.Error("can't get records form databas: " + err.Error())
+		slog.Error("can't get records form databas", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -406,14 +489,17 @@ func (s Server) getAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := proto.Marshal(u)
 	if err != nil {
-		slog.Error("can't get records from databas: " + err.Error())
+		slog.Error("can't get records from database", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Header().Add("Content-Type", "application/protobu")
-	w.Write(resp)
+	w.Header().Add("Content-Type", "application/protobuf")
+	_, err = w.Write(resp)
+	if err != nil {
+		slog.Error("can't write response for user collection", "error", err)
+	}
 	slog.Info("GET all users, " +
 		strconv.FormatInt(int64(len(users)), 10) + " users returned")
 }
@@ -424,13 +510,13 @@ func (s Server) websocketHandler(ws *WebSocket) func(w http.ResponseWriter, r *h
 		upgrader := websocket.Upgrader{}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			slog.Error("can't upgrade connection " + err.Error())
+			slog.Error("can't upgrade connection", "error", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
 		ws.AddConn(conn)
-		slog.Info("new websocket connection with " + conn.RemoteAddr().String() + "established")
+		slog.Info("websocket connection established", "remote_addr", conn.RemoteAddr().String())
 	}
 }
 
@@ -450,15 +536,18 @@ func (s Server) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.db.DeleteUser(r.Context(), int32(id))
+	err = s.db.DeleteUser(r.Context(), id)
 	if err != nil {
 		slog.Error("can't delete user: " + err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("User with id " + pathID + "successfull deleted"))
-	slog.Info(fmt.Sprintf("DELETE user, user with id %d was deleted", id))
+	_, err = w.Write([]byte(html.EscapeString("User with id " + pathID + "successful deleted")))
+	if err != nil {
+		slog.Error("can't write response for user deletion", "error", err)
+	}
+	slog.Info("Delete user", "id", id)
 }
 
 // patchUserHandler handle requests for updating of the user.
@@ -466,22 +555,27 @@ func (s Server) patchUserHandler(w http.ResponseWriter, r *http.Request) {
 	user := &crudpb.User{}
 
 	if r.Header.Get("Content-Type") != "application/protobuf" {
-		slog.Error("Content-Type header is set to " + r.Header.Get("Content-Type"))
+		slog.Error("Unsupported Content-Type", "content_type", r.Header.Get("Content-Type"))
 		http.Error(w, "Accept only application/protobuf Content-Type", http.StatusBadRequest)
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("can't read request body from " + r.RemoteAddr)
+		slog.Error("can't read request body", "remote_addr", r.RemoteAddr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			slog.Error("can't close request body", "remote_addr", r.RemoteAddr)
+		}
+	}()
 
 	err = proto.Unmarshal(body, user)
 	if err != nil {
-		slog.Error("can't unmarshal body from " + r.RemoteAddr)
+		slog.Error("can't unmarshal body", "remote_addr", r.RemoteAddr)
 		http.Error(w, "Incorrect message format", http.StatusBadRequest)
 		return
 	}
@@ -494,7 +588,7 @@ func (s Server) patchUserHandler(w http.ResponseWriter, r *http.Request) {
 		Role:      user.Role,
 	}, user.Password)
 	if err != nil {
-		slog.Error("can't update user: " + err.Error())
+		slog.Error("can't update user", "error", err)
 		var pgErr *pgconn.PgError
 		var errStr string
 		if errors.As(err, &pgErr) {
@@ -534,37 +628,45 @@ func (s Server) deleteRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.db.DeleteRecord(r.Context(), int32(id))
+	err = s.db.DeleteRecord(r.Context(), id)
 	if err != nil {
 		slog.Error("can't delete resource record: " + err.Error())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Resource record with id " + pathID + "successfull deleted"))
-	slog.Info("DELETE resource record " + pathID)
+	_, err = w.Write([]byte(html.EscapeString("Resource record with id " + pathID + "successful deleted")))
+	if err != nil {
+		slog.Error("can't write response for resource record deletion", "error", err.Error())
+	}
+	slog.Info("Delete resource record", "id", pathID)
 }
 
 // postRRHandler handle create of resource records requests.
 func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Content-Type") != "application/protobuf" {
-		slog.Error("Content-Type header is set to " + r.Header.Get("Content-Type"))
+		slog.Error("Unsupported Content-Type", "content_type", r.Header.Get("Content-Type"))
 		http.Error(w, "Accept only application/protobuf Content-Type", http.StatusBadRequest)
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("can't read request body from " + r.RemoteAddr)
+		slog.Error("can't read request", "addr", r.RemoteAddr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			slog.Error("can't close request body", "remote_addr", r.RemoteAddr)
+		}
+	}()
 
 	rr := &crudpb.ResourceRecord{}
 	err = proto.Unmarshal(body, rr)
 	if err != nil {
-		slog.Error("can't unmarshal body from " + r.RemoteAddr)
+		slog.Error("can't unmarshal body", "remote_addr", r.RemoteAddr)
 		http.Error(w, "Incorrect message format", http.StatusBadRequest)
 		return
 	}
@@ -575,7 +677,7 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 			Data:   rr.Data,
 			Type:   rr.Type,
 			Class:  rr.Class,
-			TTL:    rr.TimeToLive,
+			TTL:    rr.Ttl,
 		})
 	if err != nil {
 		slog.Error("can't add resource record: " + err.Error())
@@ -598,21 +700,29 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	protoRR := &crudpb.ResourceRecord{
-		Id:         id,
-		Domain:     rr.Domain,
-		Data:       rr.Data,
-		Type:       rr.Type,
-		Class:      rr.Class,
-		TimeToLive: rr.TimeToLive,
+		Id:     id,
+		Domain: rr.Domain,
+		Data:   rr.Data,
+		Type:   rr.Type,
+		Class:  rr.Class,
+		Ttl:    rr.Ttl,
 	}
 
 	result, err := proto.Marshal(protoRR)
+	if err != nil {
+		slog.Error("can't marshal resource record message: " + err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
-	w.Write(result)
+	_, err = w.Write(result)
+	if err != nil {
+		slog.Error("can't write response for resource record creation: " + err.Error())
+	}
 	slog.Info(fmt.Sprintf("POST resource record: %s %d %s %s %s",
-		rr.Domain, rr.TimeToLive, rr.Class, rr.Type, rr.Data,
+		rr.Domain, rr.Ttl, rr.Class, rr.Type, rr.Data,
 	))
 }
 
@@ -621,22 +731,27 @@ func (s Server) patchRRHandler(w http.ResponseWriter, r *http.Request) {
 	rr := &crudpb.ResourceRecord{}
 
 	if r.Header.Get("Content-Type") != "application/protobuf" {
-		slog.Error("Content-Type header is set to " + r.Header.Get("Content-Type"))
+		slog.Error("Unsupported Content-Type", "content_type", r.Header.Get("Content-Type"))
 		http.Error(w, "Accept only application/protobuf Content-Type", http.StatusBadRequest)
 		return
 	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		slog.Error("can't read request body from " + r.RemoteAddr)
+		slog.Error("can't read request body", "remote_addr", r.RemoteAddr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			slog.Error("can't close request body", "remote_addr", r.RemoteAddr)
+		}
+	}()
 
 	err = proto.Unmarshal(body, rr)
 	if err != nil {
-		slog.Error("can't unmarshal body from " + r.RemoteAddr)
+		slog.Error("can't unmarshal body", "remote_addr", r.RemoteAddr)
 		http.Error(w, "Incorrect message format", http.StatusBadRequest)
 		return
 	}
@@ -648,7 +763,7 @@ func (s Server) patchRRHandler(w http.ResponseWriter, r *http.Request) {
 			Data:   rr.Data,
 			Type:   rr.Type,
 			Class:  rr.Class,
-			TTL:    rr.TimeToLive,
+			TTL:    rr.Ttl,
 		})
 	if err != nil {
 		slog.Error("can't update user: " + err.Error())
@@ -659,42 +774,70 @@ func (s Server) patchRRHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	slog.Info(fmt.Sprintf("PATCH resource record, "+
 		"resource record with id %d was updated: %s %d %s %s %s",
-		rr.Id, rr.Domain, rr.TimeToLive, rr.Class, rr.Type, rr.Data))
+		rr.Id, rr.Domain, rr.Ttl, rr.Class, rr.Type, rr.Data))
 }
 
 func (s Server) getAllLogsHandler(w http.ResponseWriter, r *http.Request) {
 	result := &crudpb.LogCollection{}
 	file, err := os.Open("DNSServer.log")
 	if err != nil {
+		slog.Error("can't open log file", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			slog.Error("can't read log file", "error", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 		line := scanner.Text()
 		log := make(map[string]any)
 		err := json.Unmarshal([]byte(line), &log)
 		if err != nil {
+			slog.Error("can't unmarshal log line", "error", err)
 			continue
 		}
-		t, err := time.Parse(time.RFC3339, log["time"].(string))
+		s, ok := log["time"].(string)
+		if !ok {
+			slog.Error("can't get time from log line")
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, s)
 		if err != nil {
+			slog.Error("can't parse log time", "error", err)
 			t = time.Now()
+		}
+		l, ok := log["level"].(string)
+		if !ok {
+			slog.Error("can't get level from log line")
+			continue
+		}
+		m, ok := log["msg"].(string)
+		if !ok {
+			slog.Error("can't get message from log line")
+			continue
 		}
 		result.Logs = append(result.Logs, &crudpb.Log{
 			Time:  timestamppb.New(t),
-			Level: log["level"].(string),
-			Msg:   log["msg"].(string),
+			Level: l,
+			Msg:   m,
 		})
 	}
 	resp, err := proto.Marshal(result)
 	if err != nil {
-		slog.Error("can't get records from database: " + err.Error())
+		slog.Error("can't get records from database", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
-	w.Write(resp)
+	_, err = w.Write(resp)
+	if err != nil {
+		slog.Error("can't write response for logs", "error", err)
+	}
 	slog.Info("GET all logs, " +
 		strconv.FormatInt(int64(len(result.Logs)), 10) + " logs returned")
 }

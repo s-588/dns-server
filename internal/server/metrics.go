@@ -5,6 +5,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
+// Metrics holds Prometheus metrics for the DNS server.
 type Metrics struct {
 	HTTPRequestsTotal   *prometheus.CounterVec
 	HTTPRequestDuration *prometheus.HistogramVec
@@ -17,6 +18,7 @@ type Metrics struct {
 	RROperationsTotal  *prometheus.CounterVec
 }
 
+// NewMetrics creates a new Metrics instance with the provided Prometheus metrics.
 func NewMetrics() *Metrics {
 	return &Metrics{
 		HTTPRequestsTotal: prometheus.NewCounterVec(

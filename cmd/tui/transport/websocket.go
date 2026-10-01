@@ -26,11 +26,13 @@ func (t *Transport) EstablishWebsocketConnection(jar http.CookieJar, addr string
 	return nil
 }
 
+// LogMsg represents a log message received from the WebSocket connection.
 type LogMsg struct {
 	Time       time.Time
 	Level, Msg string
 }
 
+// ListenWebSocket listens for incoming WebSocket messages and sends them to the provided channel.
 func (t *Transport) ListenWebSocket(msgs chan LogMsg) {
 	for {
 		var msg LogMsg

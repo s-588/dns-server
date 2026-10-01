@@ -1,3 +1,4 @@
+// Package export provides a model for exporting data from the DNS server.
 package export
 
 import (
@@ -13,7 +14,8 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/util"
 )
 
-type ExportModel struct {
+// Model represents the state and behavior of the export page in the TUI application.
+type Model struct {
 	// Width and height of the screen.
 	width, height int
 	// Focused input field
@@ -29,8 +31,8 @@ type ExportModel struct {
 	focusButtons bool
 }
 
-// Create new add model.
-func NewExportModel(t *transport.Transport, w, h int) ExportModel {
+// NewModel creates a new export model.
+func NewModel(t *transport.Transport, w, h int) Model {
 	inputs := make([]textinput.Model, 0, 2)
 
 	startDate := textinput.New()
@@ -46,7 +48,7 @@ func NewExportModel(t *transport.Transport, w, h int) ExportModel {
 	endDate.Width = w / 3
 	inputs = append(inputs, endDate)
 
-	return ExportModel{
+	return Model{
 		width:       w,
 		height:      h,
 		inputFields: inputs,
@@ -54,46 +56,19 @@ func NewExportModel(t *transport.Transport, w, h int) ExportModel {
 	}
 }
 
-func (dm ExportModel) Init() tea.Cmd {
+// Init initializes the export model.
+func (dm Model) Init() tea.Cmd {
 	return nil
 }
 
-// Handle messages that comming from the user interactions.
-func (m ExportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update handle messages that coming from the user interactions.
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
-		case "up", "shift+tab":
-			if !m.focusButtons {
-				if m.focusIndex > 0 {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusIndex--
-					m.inputFields[m.focusIndex].Focus()
-				}
-			} else {
-				m.focusButtons = false
-				m.focusIndex = len(m.inputFields) - 1
-				m.inputFields[len(m.inputFields)-1].Focus()
-			}
-
-		case "down", "tab":
-			if !m.focusButtons {
-				if m.focusIndex < len(m.inputFields)-1 {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusIndex++
-					m.inputFields[m.focusIndex].Focus()
-				} else {
-					m.inputFields[m.focusIndex].Blur()
-					m.focusButtons = true
-					m.cursor = 0
-				}
-			} else {
-				m.focusButtons = false
-				m.focusIndex = 0
-				m.inputFields[0].Focus()
-			}
+		case "up", "shift+tab", "down", "tab":
+			m = processVerticalMoves(m, msg.String())
 		case "left", "h":
 			if m.focusButtons && m.cursor > 0 {
 				m.cursor--
@@ -104,41 +79,12 @@ func (m ExportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "ctrl+c", "esc":
 			return m, func() tea.Msg {
-				return ExportCancelMsg{}
+				return CancelMsg{}
 			}
 		case "enter", " ":
-			if m.focusButtons {
-				if m.cursor == 0 { // Yes button
-					if m.inputFields[0].Err != nil {
-						return m, popup.Error(m.inputFields[0].Err.Error(), "")
-					}
-					if m.inputFields[1].Err != nil {
-						return m, popup.Error(m.inputFields[1].Err.Error(), "")
-					}
-
-					// Skip errors because ValidateFunc from inputs
-					// already use ParseTime error checking.
-					startTime, _ := util.ParseTime(m.inputFields[0].Value())
-					endTime, _ := util.ParseTime(m.inputFields[1].Value())
-
-					return m,
-						func() tea.Msg {
-							return ExportMsg{
-								StartTime: startTime,
-								EndTime:   endTime,
-							}
-						}
-
-				} else { // No button
-					return m, func() tea.Msg {
-						return ExportCancelMsg{}
-					}
-				}
-			} else {
-				var cmd tea.Cmd
-				m.inputFields[m.focusIndex], cmd = m.inputFields[m.focusIndex].Update(msg)
-				cmds = append(cmds, cmd)
-			}
+			var cmd tea.Cmd
+			m, cmd = processEnter(m, msg)
+			cmds = append(cmds, cmd)
 		default:
 			if !m.focusButtons {
 				var cmd tea.Cmd
@@ -150,8 +96,80 @@ func (m ExportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// Render page on the screen.
-func (m ExportModel) View() string {
+func processVerticalMoves(m Model, button string) Model {
+	switch button {
+	case "up", "shift+tab":
+		if !m.focusButtons {
+			if m.focusIndex > 0 {
+				m.inputFields[m.focusIndex].Blur()
+				m.focusIndex--
+				m.inputFields[m.focusIndex].Focus()
+			}
+		} else {
+			m.focusButtons = false
+			m.focusIndex = len(m.inputFields) - 1
+			m.inputFields[len(m.inputFields)-1].Focus()
+		}
+
+	case "down", "tab":
+		if !m.focusButtons {
+			if m.focusIndex < len(m.inputFields)-1 {
+				m.inputFields[m.focusIndex].Blur()
+				m.focusIndex++
+				m.inputFields[m.focusIndex].Focus()
+			} else {
+				m.inputFields[m.focusIndex].Blur()
+				m.focusButtons = true
+				m.cursor = 0
+			}
+		} else {
+			m.focusButtons = false
+			m.focusIndex = 0
+			m.inputFields[0].Focus()
+		}
+	}
+	return m
+}
+
+func processEnter(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.focusButtons {
+		if m.cursor == 0 { // Yes button
+			if m.inputFields[0].Err != nil {
+				return m, popup.Error(m.inputFields[0].Err.Error(), "")
+			}
+			if m.inputFields[1].Err != nil {
+				return m, popup.Error(m.inputFields[1].Err.Error(), "")
+			}
+
+			startTime, err := util.ParseTime(m.inputFields[0].Value())
+			if err != nil {
+				return m, popup.Error(err.Error(), "can't parse start time")
+			}
+			endTime, err := util.ParseTime(m.inputFields[1].Value())
+			if err != nil {
+				return m, popup.Error(err.Error(), "can't parse end time")
+			}
+
+			return m, func() tea.Msg {
+				return Msg{
+					StartTime: startTime,
+					EndTime:   endTime,
+				}
+			}
+
+		} else { // No button
+			return m, func() tea.Msg {
+				return CancelMsg{}
+			}
+		}
+	}
+	var cmd tea.Cmd
+	m.inputFields[m.focusIndex], cmd = m.inputFields[m.focusIndex].Update(msg)
+	return m, cmd
+}
+
+// View render page on the screen.
+func (m Model) View() string {
 	s := strings.Builder{}
 	s.WriteString("\n")
 
@@ -183,8 +201,10 @@ func (m ExportModel) View() string {
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
-type ExportMsg struct {
+// Msg is a message that contains the start and end time for exporting data.
+type Msg struct {
 	StartTime, EndTime time.Time
 }
 
-type ExportCancelMsg struct{}
+// CancelMsg is a message that indicates the user has canceled the export operation.
+type CancelMsg struct{}

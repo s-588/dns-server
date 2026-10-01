@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -40,7 +41,10 @@ func NewPostgres(connString string) (Postgres, error) {
 	p.pool = pool
 
 	p.db = sqlc.New(pool)
-	p.initDB()
+	err = p.initDB()
+	if err != nil {
+		return Postgres{}, fmt.Errorf("can't init database: %w", err)
+	}
 
 	return p, nil
 }
@@ -55,10 +59,14 @@ func GetConnectionString() string {
 }
 
 // GetRecord return the resource record with provided id.
-func (repo Postgres) GetRecord(ctx context.Context, id int32) (ResourceRecord, error) {
+func (repo Postgres) GetRecord(ctx context.Context, id int64) (ResourceRecord, error) {
 	rr, err := repo.db.GetResourceRecordByID(ctx, id)
 	if err != nil {
 		return ResourceRecord{}, err
+	}
+	ttl := rr.TimeToLive.Int64
+	if ttl < 0 || ttl > math.MaxUint32 {
+		return ResourceRecord{}, fmt.Errorf("TTL too big")
 	}
 	return ResourceRecord{
 		ID:     rr.ID,
@@ -66,18 +74,18 @@ func (repo Postgres) GetRecord(ctx context.Context, id int32) (ResourceRecord, e
 		Data:   rr.Data,
 		Type:   rr.Type,
 		Class:  rr.Class,
-		TTL:    rr.TimeToLive.Int32,
+		TTL:    uint32(ttl),
 	}, nil
 }
 
 // AddRecord insert record in the database and return this record with ID settled ID.
-func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (int32, error) {
+func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (int64, error) {
 	id, err := repo.db.CreateResourceRecord(ctx, sqlc.CreateResourceRecordParams{
 		Domain:     rr.Domain,
 		Type:       rr.Type,
 		Class:      rr.Class,
 		Data:       rr.Data,
-		TimeToLive: pgtype.Int4{Int32: int32(rr.TTL), Valid: true},
+		TimeToLive: pgtype.Int8{Int64: int64(rr.TTL), Valid: true},
 	})
 	if err != nil {
 		return 0, err
@@ -94,12 +102,16 @@ func (repo Postgres) GetAllRecords(ctx context.Context) ([]ResourceRecord, error
 
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
+		ttl := record.TimeToLive.Int64
+		if ttl < 0 || ttl > math.MaxUint32 {
+			return nil, fmt.Errorf("TTL too big")
+		}
 		resourceRecords = append(resourceRecords, ResourceRecord{
 			ID:     record.ID,
 			Domain: record.Domain,
 			Type:   record.Type,
 			Class:  record.Class,
-			TTL:    record.TimeToLive.Int32,
+			TTL:    uint32(ttl),
 			Data:   record.Data,
 		})
 	}
@@ -114,7 +126,7 @@ func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error 
 		Data:       rr.Data,
 		Type:       rr.Type,
 		Class:      rr.Class,
-		TimeToLive: pgtype.Int4{Int32: rr.TTL, Valid: true},
+		TimeToLive: pgtype.Int8{Int64: int64(rr.TTL), Valid: true},
 	})
 	if err != nil {
 		return err
@@ -124,7 +136,7 @@ func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error 
 }
 
 // DeleteRecord delete record with provided ID.
-func (repo Postgres) DeleteRecord(ctx context.Context, id int32) error {
+func (repo Postgres) DeleteRecord(ctx context.Context, id int64) error {
 	err := repo.db.DeleteResourceRecord(ctx, id)
 	if err != nil {
 		return err
@@ -142,11 +154,15 @@ func (repo Postgres) FindRecords(ctx context.Context, name, rrType string) ([]Re
 
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
 	for _, record := range rrs {
+		ttl := record.TimeToLive.Int64
+		if ttl < 0 || ttl > math.MaxUint32 {
+			return nil, fmt.Errorf("TTL too big")
+		}
 		resourceRecords = append(resourceRecords, ResourceRecord{
 			Domain: record.Domain,
 			Type:   record.Type,
 			Class:  record.Class,
-			TTL:    record.TimeToLive.Int32,
+			TTL:    uint32(ttl),
 			Data:   record.Data,
 		})
 	}
@@ -197,7 +213,7 @@ func (repo Postgres) UpdateUser(ctx context.Context, user User, password string)
 	}
 
 	return repo.db.UpdateUser(ctx, sqlc.UpdateUserParams{
-		ID:        int32(user.ID),
+		ID:        user.ID,
 		Login:     user.Login,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
@@ -207,7 +223,7 @@ func (repo Postgres) UpdateUser(ctx context.Context, user User, password string)
 }
 
 // AddUser add user in the database and return this user with settled ID.
-func (repo Postgres) AddUser(ctx context.Context, user User, password string) (int32, error) {
+func (repo Postgres) AddUser(ctx context.Context, user User, password string) (int64, error) {
 	if len(user.FirstName) < 2 {
 		return 0, fmt.Errorf("can't use name %s, the length less than 2", user.FirstName)
 	}
@@ -263,7 +279,7 @@ func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) 
 }
 
 // DeleteUser delete user with provided id.
-func (repo Postgres) DeleteUser(ctx context.Context, id int32) error {
+func (repo Postgres) DeleteUser(ctx context.Context, id int64) error {
 	return repo.db.DeleteUser(ctx, id)
 }
 

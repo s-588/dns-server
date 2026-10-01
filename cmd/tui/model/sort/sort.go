@@ -1,3 +1,4 @@
+// Package sort provides a model for sorting a table in the TUI.
 package sort
 
 import (
@@ -13,29 +14,32 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/style"
 )
 
-type SortModel struct {
+// Model represents the state and behavior of the sort page in the TUI application.
+type Model struct {
 	width  int
-	table  *table.TableModel
+	table  *table.Model
 	cursor int
 }
 
-func NewSortModel(table *table.TableModel, w int) SortModel {
-	m := SortModel{
+// NewModel creates a new sort model.
+func NewModel(table *table.Model, w int) Model {
+	m := Model{
 		width: w,
 		table: table,
 	}
 	return m
 }
 
-func (s SortModel) Init() tea.Cmd {
+// Init initializes the sort model.
+func (s Model) Init() tea.Cmd {
 	return nil
 }
 
-func (s SortModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update handles messages and updates the sort model accordingly.
+func (s Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "up", "k", "down", "j":
 			s.table.Descriptor.SortAscending = !s.table.Descriptor.SortAscending
@@ -50,14 +54,14 @@ func (s SortModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc", "q":
 			return s, tea.Batch(
 				func() tea.Msg {
-					return popup.PopupMsg{
+					return popup.Msg{
 						Level:    "INFO",
 						Msg:      "Sorting canceled",
 						Duration: 4 * time.Second,
 					}
 				},
 				func() tea.Msg {
-					return SortCancelMsg{}
+					return CancelMsg{}
 				},
 			)
 		case "enter", " ":
@@ -65,7 +69,7 @@ func (s SortModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			rows := s.table.Descriptor.SortFn(s.table.Descriptor.SortedColumn, s.table.UnchangedRows,
 				s.table.Descriptor.SortAscending)
 			return s, func() tea.Msg {
-				return SortMsg{
+				return Msg{
 					Rows: rows,
 				}
 			}
@@ -74,7 +78,8 @@ func (s SortModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return s, tea.Batch(cmds...)
 }
 
-func (m SortModel) View() string {
+// View renders the sort page on the screen.
+func (m Model) View() string {
 	s := strings.Builder{}
 	header := m.table.Header
 	s.WriteString(style.HeaderStyle.Render(header))
@@ -98,8 +103,10 @@ func (m SortModel) View() string {
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
-type SortMsg struct {
+// Msg is a message that is sent when the user applies a sort to the table.
+type Msg struct {
 	Rows []bubbleTable.Row
 }
 
-type SortCancelMsg struct{}
+// CancelMsg is a message that is sent when the user cancels the sort operation.
+type CancelMsg struct{}

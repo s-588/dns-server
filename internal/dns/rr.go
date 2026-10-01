@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// RR represents a DNS resource record.
 type RR struct {
 	Name     string
 	Type     Type
@@ -19,11 +20,14 @@ type RR struct {
 	RData    RData
 }
 
+// RData represents the data associated with a DNS resource record.
+// It is an interface that defines methods for working with different types of RDATA.
 type RData interface {
 	Type() Type
 	MarshalBinary() ([]byte, error)
 }
 
+// decodeRData decodes the RDATA from a byte slice based on the provided Type.
 func decodeRData(t Type, data []byte) (RData, error) {
 	switch t {
 	case TypeA:
@@ -51,11 +55,11 @@ func decodeRData(t Type, data []byte) (RData, error) {
 		err := txt.UnmarshalBinary(data)
 		return txt, err
 	default:
-		return nil, errors.New("Uknown RDATA type")
+		return nil, errors.New("unknown RDATA type")
 	}
-
 }
 
+// ParseRData parses the RDATA from a string representation based on the provided Type.
 func ParseRData(t Type, s string) (RData, error) {
 	switch t {
 	case TypeA:

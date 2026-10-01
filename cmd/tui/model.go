@@ -1,3 +1,4 @@
+// Package tui implements text user interface for the DNS server.
 package tui
 
 import (
@@ -172,11 +173,11 @@ type model struct {
 	tabs        []string
 	selectedTab int
 
-	tables  []table.TableModel
+	tables  []table.Model
 	logChan chan transport.LogMsg
 
 	// Model for popup notifications.
-	popup popup.PopupModel
+	popup popup.Model
 
 	loginPage account.LoginModel
 	// Model for adding resource records to the database.
@@ -186,9 +187,9 @@ type model struct {
 	// Model for deleting resource records from the database.
 	deletePage  crud.DeleteModel
 	searchInput textinput.Model
-	sortPage    sort.SortModel
-	filterPage  filter.FilterModel
-	exportModel export.ExportModel
+	sortPage    sort.Model
+	filterPage  filter.Model
+	exportModel export.Model
 
 	keys keyMap
 	help help.Model
@@ -196,7 +197,7 @@ type model struct {
 	transport *transport.Transport
 }
 
-// Creating new model of the user interface.
+// NewModel creates a model of the user interface.
 func NewModel() (model, error) {
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
@@ -204,7 +205,7 @@ func NewModel() (model, error) {
 	}
 	if w < minWidth || h < minHeight {
 		return model{},
-			fmt.Errorf("Minimum size of the screen is %dx%d. Current is %dx%d",
+			fmt.Errorf("minimum size of the screen is %dx%d. Current is %dx%d",
 				minWidth, minHeight, w, h)
 	}
 	w, h = w-8, max(3, h-20)
@@ -223,7 +224,7 @@ func NewModel() (model, error) {
 	return model{
 		loginPage:   account.NewLoginModel(t, w, h),
 		focusLayer:  focusLoginModel,
-		exportModel: export.NewExportModel(t, w, h),
+		exportModel: export.NewModel(t, w, h),
 		searchInput: searchInput,
 		help:        help.New(),
 
@@ -233,7 +234,7 @@ func NewModel() (model, error) {
 		logChan:   make(chan transport.LogMsg, 1),
 		transport: t,
 
-		popup: popup.NewPopupModel(),
+		popup: popup.NewModel(),
 	}, nil
 }
 
@@ -242,7 +243,7 @@ func (m model) Close() tea.Cmd {
 	return tea.Quit
 }
 
-// Initialize esential things.
+// Initialize essential things.
 func (m model) Init() tea.Cmd {
 	return tea.Batch(popup.ListenForPopupMsg(m.popup.MsgChan))
 }

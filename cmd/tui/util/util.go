@@ -1,3 +1,4 @@
+// Package util provides utility functions for the TUI.
 package util
 
 import (
@@ -6,6 +7,7 @@ import (
 	"time"
 )
 
+// ParseTime parses a time string in various formats (DateOnly, DateTime, TimeOnly) and returns a time.Time object.
 func ParseTime(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, errors.New("time is empty")
@@ -25,6 +27,7 @@ func ParseTime(s string) (time.Time, error) {
 	return t, err
 }
 
+// ValidateTimeFunc validates the time string using ParseTime function.
 func ValidateTimeFunc(s string) error {
 	_, err := ParseTime(s)
 	return err

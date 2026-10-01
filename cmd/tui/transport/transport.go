@@ -1,3 +1,4 @@
+// Package transport provides the transport layer for the TUI, including HTTP client and WebSocket connection.
 package transport
 
 import (
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+// Transport represents the transport layer for the TUI.
 type Transport struct {
 	Addr       string
 	httpAddr   string
@@ -17,6 +19,7 @@ type Transport struct {
 	WSConn     *websocket.Conn
 }
 
+// New creates a new Transport instance with the specified address and initializes the HTTP client with a cookie jar.
 func New(addr string) (*Transport, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {

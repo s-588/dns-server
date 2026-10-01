@@ -1,3 +1,4 @@
+// Package export provides functionality to export data to Excel format using a Python script.
 package export
 
 import (
@@ -16,7 +17,10 @@ type TableData struct {
 	Rows []table.Row `json:"rows"`
 }
 
-func ExportToExcel(tables []TableData) (string, error) {
+// Excel takes a slice of TableData, marshals it to JSON,
+// and passes it to a Python script that generates an Excel file.
+// It returns the path to the generated Excel file or an error.
+func Excel(tables []TableData) (string, error) {
 	data, err := json.Marshal(tables)
 	if err != nil {
 		return "", err

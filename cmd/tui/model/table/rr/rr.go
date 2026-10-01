@@ -1,8 +1,10 @@
+// Package rrTable provides abstract logic for data in TUI tables.
 package rrTable
 
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sort"
 	"strconv"
@@ -17,8 +19,9 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )
 
-func NewDescriptor(w int) table.TableDescriptor {
-	return table.TableDescriptor{
+// NewDescriptor creates a new table descriptor for the resource records table.
+func NewDescriptor(w int) table.Descriptor {
+	return table.Descriptor{
 		Columns: GetColumns(w),
 
 		RefreshFn: RefreshFn,
@@ -36,10 +39,12 @@ func NewDescriptor(w int) table.TableDescriptor {
 	}
 }
 
-func DeleteFn(transport *transport.Transport, id int32) error {
+// DeleteFn deletes a resource record with the specified ID using the provided transport.
+func DeleteFn(transport *transport.Transport, id int64) error {
 	return transport.DeleteRR(id)
 }
 
+// SearchFn searches for a query string in the resource record rows and returns the matching rows.
 func SearchFn(query string, rows []bubbleTable.Row) []bubbleTable.Row {
 	result := make([]bubbleTable.Row, 0, len(rows))
 	for _, row := range rows {
@@ -53,7 +58,8 @@ func SearchFn(query string, rows []bubbleTable.Row) []bubbleTable.Row {
 	return result
 }
 
-func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int32) (bubbleTable.Row, error) {
+// UpdateFn updates a resource record with the specified ID using the provided transport and input fields.
+func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int64) (bubbleTable.Row, error) {
 	for i := range inputs {
 		if inputs[i].Validate != nil {
 			err := inputs[i].Validate(inputs[i].Value())
@@ -72,10 +78,11 @@ func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int32) (bubbl
 	if ttlStr == "" {
 		ttlStr = "3600"
 	}
-	ttl, err := strconv.ParseInt(ttlStr, 10, 32)
+	ttl64, err := strconv.ParseUint(ttlStr, 10, 32)
 	if err != nil {
 		return bubbleTable.Row{}, errors.New("bad TTL")
 	}
+	ttl := uint32(ttl64)
 
 	_, err = dns.NewRR(fmt.Sprintf("%s %d %s %s %s",
 		domain,
@@ -94,15 +101,16 @@ func UpdateFn(t *transport.Transport, inputs []textinput.Model, id int32) (bubbl
 		Data:   dataStr,
 		Type:   rrType,
 		Class:  class,
-		TTL:    int32(ttl),
+		TTL:    ttl,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return []string{strconv.FormatInt(int64(id), 10), domain, dataStr, class, rrType, ttlStr}, nil
+	return []string{strconv.FormatInt(id, 10), domain, dataStr, class, rrType, ttlStr}, nil
 }
 
+// AddFn adds a new resource record using the provided transport and input fields.
 func AddFn(transport *transport.Transport, inputFields []textinput.Model) (bubbleTable.Row, error) {
 	for i := range inputFields {
 		if inputFields[i].Validate != nil {
@@ -125,7 +133,7 @@ func AddFn(transport *transport.Transport, inputFields []textinput.Model) (bubbl
 	case dns.TypeA:
 		parsedData := net.ParseIP(rr.Data).To4().String()
 		if parsedData == "<nil>" {
-			return bubbleTable.Row{}, fmt.Errorf("%s is incorrect IPv4 addres", rr.Data)
+			return bubbleTable.Row{}, fmt.Errorf("%s is incorrect IPv4 address", rr.Data)
 		}
 	case dns.TypeAAAA:
 		parsedData := net.ParseIP(rr.Data).To16().String()
@@ -142,20 +150,27 @@ func AddFn(transport *transport.Transport, inputFields []textinput.Model) (bubbl
 	if ttlStr == "" {
 		ttlStr = "3600"
 	}
-	ttl, _ := strconv.ParseInt(ttlStr, 32, 10)
-	rr.TTL = int32(ttl)
+	ttl, err := strconv.ParseUint(ttlStr, 32, 10)
+	if err != nil {
+		return bubbleTable.Row{}, errors.New("bad TTL")
+	}
+	if ttl > math.MaxUint32 {
+		return bubbleTable.Row{}, errors.New("too big TTL")
+	}
+	rr.TTL = uint32(ttl)
 
-	rr, err := transport.AddRR(rr)
+	rr, err = transport.AddRR(rr)
 	if err != nil {
 		return bubbleTable.Row{}, err
 	}
 	return bubbleTable.Row{
-		strconv.FormatInt(int64(rr.ID), 10),
+		strconv.FormatInt(rr.ID, 10),
 		rr.Domain, rr.Type, rr.Class, rr.Data,
 		ttlStr,
 	}, nil
 }
 
+// GetInputFields returns the input fields for adding or updating a resource record based on the provided width.
 func GetInputFields(width int) []textinput.Model {
 	inputs := make([]textinput.Model, 5)
 
@@ -165,63 +180,15 @@ func GetInputFields(width int) []textinput.Model {
 		input.Prompt = "* > "
 		switch i {
 		case 0:
-			input.Placeholder = "Domain name"
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("domain name must not be empty")
-				}
-				domain := dns.CanonicalName(s)
-				if _, ok := dns.IsDomainName(domain); ok {
-					return nil
-				}
-				return errors.New("incorect domain name")
-			}
-			input.Focus()
+			setupDomainInput(input)
 		case 1:
 			input.Placeholder = "Data"
 		case 2:
-			input.Placeholder = "Type"
-			input.ShowSuggestions = true
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("type must not be empty")
-				}
-				_, ok := dns.StringToType[s]
-				if !ok {
-					return fmt.Errorf("uknown type '%s' of resource record", s)
-				}
-				return nil
-			}
-			input.SetSuggestions([]string{
-				"A", "NS", "MD", "MF", "CNAME", "SOA", "MB", "MG", "MR",
-				"NULL", "WKS", "PTR", "HINFO", "MINFO", "MX", "TXT",
-			})
+			setuppTypeInput(input)
 		case 3:
-			input.Placeholder = "Class"
-			input.ShowSuggestions = true
-			input.Validate = func(s string) error {
-				if s == "" {
-					return errors.New("class must not be empty")
-				}
-				_, ok := dns.StringToClass[s]
-				if !ok {
-					return fmt.Errorf("uknown class '%s' of resource record", s)
-				}
-				return nil
-			}
-			input.SetSuggestions([]string{"IN", "CS", "CH", "HS"})
+			setupClassInput(input)
 		case 4:
-			input.Placeholder = "Time to live"
-			input.Prompt = "  > "
-			input.Validate = func(s string) error {
-				if s != "" {
-					_, err := strconv.ParseInt(s, 10, 32)
-					if err != nil {
-						return errors.New("incorrect TTL value, it must be a number")
-					}
-				}
-				return nil
-			}
+			input = setupTTLInput(input)
 		}
 		inputs[i] = input
 	}
@@ -229,6 +196,72 @@ func GetInputFields(width int) []textinput.Model {
 	return inputs
 }
 
+func setupTTLInput(input textinput.Model) textinput.Model {
+	input.Placeholder = "Time to live"
+	input.Prompt = "  > "
+	input.Validate = func(s string) error {
+		if s != "" {
+			_, err := strconv.ParseInt(s, 10, 32)
+			if err != nil {
+				return errors.New("incorrect TTL value, it must be a number")
+			}
+		}
+		return nil
+	}
+	return input
+}
+
+func setupClassInput(input textinput.Model) {
+	input.Placeholder = "Class"
+	input.ShowSuggestions = true
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("class must not be empty")
+		}
+		_, ok := dns.StringToClass[s]
+		if !ok {
+			return fmt.Errorf("uknown class '%s' of resource record", s)
+		}
+		return nil
+	}
+	input.SetSuggestions([]string{"IN", "CS", "CH", "HS"})
+}
+
+func setuppTypeInput(input textinput.Model) {
+	input.Placeholder = "Type"
+	input.ShowSuggestions = true
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("type must not be empty")
+		}
+		_, ok := dns.StringToType[s]
+		if !ok {
+			return fmt.Errorf("uknown type '%s' of resource record", s)
+		}
+		return nil
+	}
+	input.SetSuggestions([]string{
+		"A", "NS", "MD", "MF", "CNAME", "SOA", "MB", "MG", "MR",
+		"NULL", "WKS", "PTR", "HINFO", "MINFO", "MX", "TXT",
+	})
+}
+
+func setupDomainInput(input textinput.Model) {
+	input.Placeholder = "Domain name"
+	input.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("domain name must not be empty")
+		}
+		domain := dns.CanonicalName(s)
+		if _, ok := dns.IsDomainName(domain); ok {
+			return nil
+		}
+		return errors.New("incorrect domain name")
+	}
+	input.Focus()
+}
+
+// GetFilterFields returns the input fields for filtering resource records based on the provided width.
 func GetFilterFields(width int) []textinput.Model {
 	inputs := make([]textinput.Model, 4)
 	for i := range inputs {
@@ -254,6 +287,7 @@ func GetFilterFields(width int) []textinput.Model {
 	return inputs
 }
 
+// GetColumns returns the column definitions for the resource records table based on the provided width.
 func GetColumns(width int) []bubbleTable.Column {
 	return []bubbleTable.Column{
 		{
@@ -283,6 +317,7 @@ func GetColumns(width int) []bubbleTable.Column {
 	}
 }
 
+// FilterFn filters the rr rows.
 func FilterFn(inputs []textinput.Model, rows []bubbleTable.Row) ([]bubbleTable.Row, error) {
 	result := make([]bubbleTable.Row, 0)
 	for _, row := range rows {
@@ -328,6 +363,7 @@ func FilterFn(inputs []textinput.Model, rows []bubbleTable.Row) ([]bubbleTable.R
 	return result, nil
 }
 
+// SortFn sorts the resource record rows based on the specified column index and order (ascending or descending).
 func SortFn(index int, r []bubbleTable.Row, asc bool) []bubbleTable.Row {
 	switch index {
 	case 0: // ID
@@ -369,7 +405,8 @@ func SortFn(index int, r []bubbleTable.Row, asc bool) []bubbleTable.Row {
 	return r
 }
 
-func RRButtonsHandler(index int, m table.TableModel) (table.TableModel, tea.Cmd) {
+// RRButtonsHandler handles button actions for the resource records table based on the button index and the current table model.
+func RRButtonsHandler(index int, m table.Model) (table.Model, tea.Cmd) {
 	switch index {
 	case 0: // View
 		m.Table.Focus()
@@ -414,6 +451,7 @@ func RRButtonsHandler(index int, m table.TableModel) (table.TableModel, tea.Cmd)
 	return m, nil
 }
 
+// RefreshFn is a function that refreshes the table
 func RefreshFn(t *transport.Transport) ([]bubbleTable.Row, error) {
 	rrs, err := t.GetAllRRs()
 	if err != nil {
@@ -422,21 +460,22 @@ func RefreshFn(t *transport.Transport) ([]bubbleTable.Row, error) {
 	rows := make([]bubbleTable.Row, len(rrs))
 
 	for i, rr := range rrs {
-		rows[i] = []string{strconv.FormatInt(int64(rr.ID), 10), rr.Domain, rr.Data, rr.Type, rr.Class, strconv.FormatInt(int64(rr.TTL), 10)}
+		rows[i] = []string{strconv.FormatInt(rr.ID, 10), rr.Domain, rr.Data, rr.Type, rr.Class, strconv.FormatInt(int64(rr.TTL), 10)}
 	}
 
 	return rows, nil
 }
 
-func New(t *transport.Transport, w, h int) (table.TableModel, error) {
+// New is a function that creates a new table model
+func New(t *transport.Transport, w, h int) (table.Model, error) {
 	rows := make([]bubbleTable.Row, 0)
 	rrs, err := t.GetAllRRs()
 	if err != nil {
-		return table.TableModel{}, err
+		return table.Model{}, err
 	}
 	for _, rr := range rrs {
 		rows = append(rows, bubbleTable.Row{
-			strconv.FormatInt(int64(rr.ID), 10),
+			strconv.FormatInt(rr.ID, 10),
 			rr.Domain, rr.Data, rr.Type, rr.Class,
 			strconv.FormatInt(int64(rr.TTL), 10),
 		})

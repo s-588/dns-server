@@ -14,12 +14,12 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/transport"
 )
 
-// Represent model for deletion the resource record from the database.
+// DeleteModel represent model for deletion the resource record from the database.
 type DeleteModel struct {
 	// Width and height of the screen
 	width, height int
 	// Row containing the record user want to delete.
-	table *table.TableModel
+	table *table.Model
 
 	// "Yes" and "No" buttons to accept or reject delete.
 	buttons []string
@@ -30,8 +30,8 @@ type DeleteModel struct {
 	transport *transport.Transport
 }
 
-// Create new delete model.
-func NewDeleteModel(table *table.TableModel, t *transport.Transport, w int) DeleteModel {
+// NewDeleteModel creates a new delete model.
+func NewDeleteModel(table *table.Model, t *transport.Transport, w int) DeleteModel {
 	return DeleteModel{
 		table:     table,
 		buttons:   []string{"Yes", "No"},
@@ -40,11 +40,12 @@ func NewDeleteModel(table *table.TableModel, t *transport.Transport, w int) Dele
 	}
 }
 
+// Init initializes the delete model.
 func (dm DeleteModel) Init() tea.Cmd {
 	return nil
 }
 
-// Process the user interactions.
+// Update process the user interactions.
 func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -63,18 +64,18 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				id, err := strconv.ParseInt(d.table.Table.SelectedRow()[0], 10, 32)
 				if err != nil {
 					return d, func() tea.Msg {
-						return popup.PopupMsg{
+						return popup.Msg{
 							Level:    "ERROR",
 							Msg:      fmt.Sprintf("Invalid record ID: %v", err),
 							Duration: 4 * time.Second,
 						}
 					}
 				}
-				return d, func() tea.Msg { return DeleteMsg{id: int32(id)} }
+				return d, func() tea.Msg { return DeleteMsg{id: id} }
 			}
 
 			return d, tea.Batch(func() tea.Msg {
-				return popup.PopupMsg{
+				return popup.Msg{
 					Level: "INFO", Msg: "Deletion canceled",
 					Duration: 4 * time.Second,
 				}
@@ -84,7 +85,7 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "Esc":
 			return d, tea.Batch(func() tea.Msg {
-				return popup.PopupMsg{Level: "INFO", Msg: "Deletion canceled", Duration: 4 * time.Second}
+				return popup.Msg{Level: "INFO", Msg: "Deletion canceled", Duration: 4 * time.Second}
 			}, func() tea.Msg {
 				return DeleteCancelMsg{}
 			})
@@ -93,22 +94,22 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		err := d.delete(msg.id)
 		if err != nil {
 			return d, func() tea.Msg {
-				return popup.PopupMsg{
+				return popup.Msg{
 					Level: "ERROR", Msg: "Can't delete record",
 					Duration: 4 * time.Second,
 				}
 			}
 		}
 		return d, tea.Batch(func() tea.Msg {
-			return popup.PopupMsg{
+			return popup.Msg{
 				Level:    "SUCCESS",
-				Msg:      "Record succesfully deleted",
+				Msg:      "Record successfully deleted",
 				Duration: 4 * time.Second,
 			}
 		},
 			func() tea.Msg {
 				return DeleteSuccessMsg{
-					Id: msg.id,
+					ID: msg.id,
 				}
 			})
 	}
@@ -116,7 +117,7 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // Delete record from database.
-func (d DeleteModel) delete(id int32) error {
+func (d DeleteModel) delete(id int64) error {
 	err := d.transport.DeleteRR(id)
 	if err != nil {
 		return fmt.Errorf("can't delete from database: %w", err)
@@ -124,6 +125,7 @@ func (d DeleteModel) delete(id int32) error {
 	return nil
 }
 
+// View renders the delete model.
 func (d DeleteModel) View() string {
 	s := strings.Builder{}
 	s.WriteString(style.HeaderStyle.Render("Confirm Deletion"))
@@ -141,13 +143,15 @@ func (d DeleteModel) View() string {
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
+// DeleteMsg is a message that indicates a request to delete a record with a specific ID.
 type DeleteMsg struct {
-	id      int32
-	confirm bool
+	id int64
 }
 
+// DeleteSuccessMsg is a message that indicates a successful deletion of a record with a specific ID.
 type DeleteSuccessMsg struct {
-	Id int32
+	ID int64
 }
 
+// DeleteCancelMsg is a message that indicates the deletion operation was canceled by the user.
 type DeleteCancelMsg struct{}

@@ -59,9 +59,16 @@ func TestParseRData(t *testing.T) {
 				t.Errorf("ParseRData(%v, %q) unexpected error: %v", tt.typ, tt.input, err)
 				continue
 			}
-			// Compare by marshal equality (simpler)
-			wantData, _ := tt.want.MarshalBinary()
-			gotData, _ := got.MarshalBinary()
+			wantData, err := tt.want.MarshalBinary()
+			if err != nil {
+				t.Errorf("ParseRData(%v, %q) unexpected error marshaling want: %v", tt.typ, tt.input, err)
+				continue
+			}
+			gotData, err := got.MarshalBinary()
+			if err != nil {
+				t.Errorf("ParseRData(%v, %q) unexpected error marshaling got: %v", tt.typ, tt.input, err)
+				continue
+			}
 			if !bytes.Equal(wantData, gotData) {
 				t.Errorf("ParseRData(%v, %q) = %v, want %v", tt.typ, tt.input, got, tt.want)
 			}
@@ -98,8 +105,16 @@ func TestDecodeRData(t *testing.T) {
 				continue
 			}
 			// Compare by marshal
-			wantData, _ := tt.want.MarshalBinary()
-			gotData, _ := got.MarshalBinary()
+			wantData, err := tt.want.MarshalBinary()
+			if err != nil {
+				t.Errorf("decodeRData(%v, %v) unexpected error marshaling want: %v", tt.typ, tt.data, err)
+				continue
+			}
+			gotData, err := got.MarshalBinary()
+			if err != nil {
+				t.Errorf("decodeRData(%v, %v) unexpected error marshaling got: %v", tt.typ, tt.data, err)
+				continue
+			}
 			if !bytes.Equal(wantData, gotData) {
 				t.Errorf("decodeRData(%v, %v) = %v, want %v", tt.typ, tt.data, got, tt.want)
 			}

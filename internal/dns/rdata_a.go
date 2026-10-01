@@ -8,14 +8,17 @@ import (
 	"net/netip"
 )
 
+// A represents a DNS A record.
 type A struct {
 	IP netip.Addr
 }
 
+// Type returns the DNS record type for A records.
 func (a A) Type() Type {
 	return TypeA
 }
 
+// MarshalBinary marshals the A record into binary format.
 func (a *A) MarshalBinary() ([]byte, error) {
 	if !a.IP.Is4() {
 		return nil, errors.New("A record must be IPv4")
@@ -23,6 +26,7 @@ func (a *A) MarshalBinary() ([]byte, error) {
 	return a.IP.AsSlice(), nil
 }
 
+// UnmarshalBinary unmarshals the binary data into the A record.
 func (a *A) UnmarshalBinary(data []byte) error {
 	ip, ok := netip.AddrFromSlice(data)
 	if !ok {

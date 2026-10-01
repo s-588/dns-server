@@ -1,0 +1,118 @@
+version: "3"
+
+vars:
+  GO_PACKAGES: ./...
+  PROTO_FILE: ./**/*.proto
+
+dotenv: [".env"]
+
+tasks:
+  install-tools:
+    desc: Install required Go tools (sqlc, goose, protoc plugins, golangci-lint)
+    cmds:
+      - go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+      - go install github.com/pressly/goose/v3/cmd/goose@latest
+      - go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+      - go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+      - |
+        if ! command -v protoc >/dev/null 2>&1; then
+          echo "protoc not found in PATH. Install Protocol Buffers compiler:"
+          echo "  https://grpc.io/docs/protoc-installation/"
+          exit 1
+        fi
+
+  setup:
+    desc: Install tools and generate code
+    cmds:
+      - task: install-tools
+      - task: generate
+
+  generate:
+    desc: Generate sqlc and protobuf code
+    cmds:
+      - task: sqlc:generate
+      - task: proto:generate
+
+  sqlc:generate:
+    desc: Generate code from SQL (sqlc generate)
+    dir: internal/database
+    cmds:
+      - sqlc generate
+    sources:
+      - sqlc.yaml
+      - sqlc.yml
+      - "**/*.sql"
+    generates:
+      - "**/*.sql.go"
+
+  sqlc:check:
+    desc: Check that generated sqlc code is up to date (sqlc diff)
+    dir: internal/database
+    cmds:
+      - sqlc diff
+    sources:
+      - sqlc.yaml
+      - sqlc.yml
+      - "**/*.sql"
+      - "**/*.sql.go"
+
+  sqlc:vet:
+    desc: Lint SQL queries (sqlc vet)
+    dir: internal/database
+    cmds:
+      - sqlc vet
+
+  sqlc:compile:
+    desc: Statically check SQL for syntax and type errors
+    dir: internal/database
+    cmds:
+      - sqlc compile
+
+  proto:generate:
+    desc: Generate protobuf Go + gRPC code
+    dir: proto
+    cmds:
+      - protoc {{.PROTO_PATHS}}
+        --go_out=./genproto/
+        {{.PROTO_FILE}}
+    generates:
+      - "**/*.pb.go"
+
+  fmt:
+    desc: Format and clean Go code (go fix, go vet, golangci-lint)
+    cmds:
+      - go fix {{.GO_PACKAGES}}
+      - go vet {{.GO_PACKAGES}}
+      - golangci-lint fmt
+      - golangci-lint run --fix
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - .golangci.yml
+      - .golangci.yaml
+
+  fmt:check:
+    desc: Check formatting without writing (golangci-lint)
+    cmds:
+      - golangci-lint fmt --diff
+      - golangci-lint run
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+      - .golangci.yml
+      - .golangci.yaml
+
+  check:
+    desc: Verify generated code and formatting are up to date
+    cmds:
+      - task: sqlc:check
+      - task: fmt:check
+
+  run:
+    desc: Start services with Docker Compose
+    cmds:
+      - docker compose down
+      - docker compose up --build -d

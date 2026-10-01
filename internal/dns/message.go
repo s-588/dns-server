@@ -4,10 +4,12 @@ package dns
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/prionis/dns-server/internal/dns/codec"
 )
 
+// Message represents a DNS message.
 type Message struct {
 	Header      Header
 	Questions   []Question
@@ -16,12 +18,14 @@ type Message struct {
 	Additionals []RR
 }
 
+// Question represents a DNS question section.
 type Question struct {
 	Name  string
 	Type  Type
 	Class Class
 }
 
+// encodeQuestion encodes a DNS question into the provided codec.Writer.
 func encodeQuestion(w *codec.Writer, q Question) error {
 	if err := w.WriteName(q.Name); err != nil {
 		return fmt.Errorf("write domain name: %w", err)
@@ -33,6 +37,7 @@ func encodeQuestion(w *codec.Writer, q Question) error {
 	return nil
 }
 
+// decodeQuestion decodes a DNS question from the provided codec.Reader.
 func decodeQuestion(r *codec.Reader) (Question, error) {
 	var q Question
 	var err error
@@ -56,6 +61,7 @@ func decodeQuestion(r *codec.Reader) (Question, error) {
 	return q, nil
 }
 
+// encodeRR encodes a DNS resource record into the provided codec.Writer.
 func encodeRR(w *codec.Writer, rr RR) error {
 	if err := w.WriteName(rr.Name); err != nil {
 		return fmt.Errorf("write domain name: %w", err)
@@ -69,12 +75,17 @@ func encodeRR(w *codec.Writer, rr RR) error {
 	if err != nil {
 		return fmt.Errorf("marshal RR data: %w", err)
 	}
-	w.Uint16(uint16(len(rdata)))
+	l := len(rdata)
+	if l < 0 || l > math.MaxUint16 {
+		return fmt.Errorf("length of rdata is too big: %d", l)
+	}
+	w.Uint16(uint16(l))
 	w.Bytes(rdata)
 
 	return nil
 }
 
+// decodeRR decodes a DNS resource record from the provided codec.Reader.
 func decodeRR(r *codec.Reader) (RR, error) {
 	var rr RR
 	var err error
@@ -119,15 +130,32 @@ func decodeRR(r *codec.Reader) (RR, error) {
 	return rr, nil
 }
 
+// MarshalBinary marshals the Message into binary format.
 func (m *Message) MarshalBinary() ([]byte, error) {
 	w := codec.NewWriter()
 
 	w.Uint16(m.Header.ID)
 	w.Uint16(m.Header.Flags)
-	w.Uint16(uint16(len(m.Questions)))
-	w.Uint16(uint16(len(m.Answers)))
-	w.Uint16(uint16(len(m.Authorities)))
-	w.Uint16(uint16(len(m.Additionals)))
+
+	err := putUint16(len(m.Questions), w)
+	if err != nil {
+		return nil, err
+	}
+
+	err = putUint16(len(m.Answers), w)
+	if err != nil {
+		return nil, err
+	}
+
+	err = putUint16(len(m.Authorities), w)
+	if err != nil {
+		return nil, err
+	}
+
+	err = putUint16(len(m.Additionals), w)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, q := range m.Questions {
 		if err := encodeQuestion(w, q); err != nil {
@@ -156,6 +184,15 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	return w.Buffer(), nil
 }
 
+func putUint16(v int, w *codec.Writer) error {
+	if v < 0 || v > math.MaxUint16 {
+		return fmt.Errorf("too many questions: %d", v)
+	}
+	w.Uint16(uint16(v))
+	return nil
+}
+
+// UnmarshalBinary unmarshals the binary data into the Message.
 func (m *Message) UnmarshalBinary(data []byte) error {
 	r := codec.NewReader(data)
 	var err error

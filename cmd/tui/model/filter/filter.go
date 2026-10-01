@@ -1,3 +1,4 @@
+// Package filter implements the filter page of the user interface.
 package filter
 
 import (
@@ -13,8 +14,9 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/style"
 )
 
-type FilterModel struct {
-	width, height int
+// Model represents the model for filtering resource records in the database.
+type Model struct {
+	width int
 
 	// Focused input field
 	focusedInput int
@@ -26,11 +28,12 @@ type FilterModel struct {
 	cursor       int
 	focusButtons bool
 
-	table *table.TableModel
+	table *table.Model
 }
 
-func NewFilterModel(table *table.TableModel, w int) FilterModel {
-	m := FilterModel{
+// NewModel creates a new filter model.
+func NewModel(table *table.Model, w int) Model {
+	m := Model{
 		width: w,
 
 		inputs: table.Descriptor.FilterFields,
@@ -41,45 +44,19 @@ func NewFilterModel(table *table.TableModel, w int) FilterModel {
 	return m
 }
 
-func (f FilterModel) Init() tea.Cmd {
+// Init initializes the filter model.
+func (f Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m FilterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update handles messages that coming from the user interactions.
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
-		case "up", "shift+tab":
-			if !m.focusButtons {
-				if m.focusedInput > 0 {
-					m.inputs[m.focusedInput].Blur()
-					m.focusedInput--
-					m.inputs[m.focusedInput].Focus()
-				}
-			} else {
-				m.focusButtons = false
-				m.focusedInput = len(m.inputs) - 1
-				m.inputs[len(m.inputs)-1].Focus()
-			}
-
-		case "down", "tab":
-			if !m.focusButtons {
-				if m.focusedInput < len(m.inputs)-1 {
-					m.inputs[m.focusedInput].Blur()
-					m.focusedInput++
-					m.inputs[m.focusedInput].Focus()
-				} else {
-					m.inputs[m.focusedInput].Blur()
-					m.focusButtons = true
-					m.cursor = 0
-				}
-			} else {
-				m.focusButtons = false
-				m.focusedInput = 0
-				m.inputs[0].Focus()
-			}
+		case "up", "shift+tab", "down", "tab":
+			m = processVerticalMoves(m, msg.String())
 		case "left", "h":
 			if m.focusButtons && m.cursor > 0 {
 				m.cursor--
@@ -91,45 +68,27 @@ func (m FilterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Batch(
 				func() tea.Msg {
-					return popup.PopupMsg{
+					return popup.Msg{
 						Level:    "INFO",
 						Msg:      "Addition canceled",
 						Duration: 4 * time.Second,
 					}
 				},
 				func() tea.Msg {
-					return FilterCancelMsg{}
+					return CancelMsg{}
 				},
 			)
 		case "enter", " ":
-			if m.focusButtons {
-				if m.cursor == 0 { // Yes button
-					rows, err := m.table.Descriptor.FilterFn(m.inputs, m.table.UnchangedRows)
-					if err != nil {
-						return m, popup.Error(err.Error(), "")
-					}
-					return m, func() tea.Msg {
-						return FilterMsg{
-							Rows: rows,
-						}
-					}
-				} else { // No button
-					return m, func() tea.Msg {
-						return FilterCancelMsg{}
-					}
-				}
-			} else {
-				var cmd tea.Cmd
-				m.inputs[m.focusedInput], cmd = m.inputs[m.focusedInput].Update(msg)
-				cmds = append(cmds, cmd)
-			}
+			var cmd tea.Cmd
+			m, cmd = processEnterPress(m, msg)
+			cmds = append(cmds, cmd)
 		case "esc", "q":
 			if m.focusButtons {
 				m.focusButtons = false
 				m.inputs[m.focusedInput].Focus()
 			} else {
 				return m, func() tea.Msg {
-					return FilterCancelMsg{}
+					return CancelMsg{}
 				}
 			}
 		default:
@@ -143,7 +102,66 @@ func (m FilterModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (f FilterModel) View() string {
+func processEnterPress(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if m.focusButtons {
+		if m.cursor == 0 { // Yes button
+			rows, err := m.table.Descriptor.FilterFn(m.inputs, m.table.UnchangedRows)
+			if err != nil {
+				return m, popup.Error(err.Error(), "")
+			}
+			return m, func() tea.Msg {
+				return Msg{
+					Rows: rows,
+				}
+			}
+		} else { // No button
+			return m, func() tea.Msg {
+				return CancelMsg{}
+			}
+		}
+	}
+	var cmd tea.Cmd
+	m.inputs[m.focusedInput], cmd = m.inputs[m.focusedInput].Update(msg)
+	return m, cmd
+}
+
+func processVerticalMoves(m Model, button string) Model {
+	switch button {
+	case "up", "tab+shift":
+		if !m.focusButtons {
+			if m.focusedInput > 0 {
+				m.inputs[m.focusedInput].Blur()
+				m.focusedInput--
+				m.inputs[m.focusedInput].Focus()
+			}
+		} else {
+			m.focusButtons = false
+			m.focusedInput = len(m.inputs) - 1
+			m.inputs[len(m.inputs)-1].Focus()
+		}
+
+	case "down", "tab":
+		if !m.focusButtons {
+			if m.focusedInput < len(m.inputs)-1 {
+				m.inputs[m.focusedInput].Blur()
+				m.focusedInput++
+				m.inputs[m.focusedInput].Focus()
+			} else {
+				m.inputs[m.focusedInput].Blur()
+				m.focusButtons = true
+				m.cursor = 0
+			}
+		} else {
+			m.focusButtons = false
+			m.focusedInput = 0
+			m.inputs[0].Focus()
+		}
+	}
+	return m
+}
+
+// View renders the filter page on the screen.
+func (f Model) View() string {
 	s := strings.Builder{}
 	s.WriteString(style.HeaderStyle.Render("Filter record"))
 	s.WriteString("\n\n")
@@ -177,8 +195,10 @@ func (f FilterModel) View() string {
 	return lipgloss.NewStyle().Align(lipgloss.Center, lipgloss.Center).Render(s.String())
 }
 
-type FilterMsg struct {
+// Msg is a message that is sent when the user applies a filter to the table.
+type Msg struct {
 	Rows []bubbleTable.Row
 }
 
-type FilterCancelMsg struct{}
+// CancelMsg is a message that is sent when the user cancels the filter operation.
+type CancelMsg struct{}

@@ -1,3 +1,4 @@
+// Package logTable provides a model for displaying and interacting with log data in a table format within a TUI application.
 package logTable
 
 import (
@@ -14,8 +15,9 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/util"
 )
 
-func NewDescriptor(width int) table.TableDescriptor {
-	return table.TableDescriptor{
+// NewDescriptor creates a new table descriptor for the log table.
+func NewDescriptor(width int) table.Descriptor {
+	return table.Descriptor{
 		Columns: GetColumns(width),
 
 		FilterFn:     FilterFn,
@@ -28,6 +30,7 @@ func NewDescriptor(width int) table.TableDescriptor {
 	}
 }
 
+// RefreshFn retrieves all logs from the transport and returns them as table rows.
 func RefreshFn(t *transport.Transport) ([]bubbleTable.Row, error) {
 	logs, err := t.GetAllLogs()
 	if err != nil {
@@ -42,6 +45,7 @@ func RefreshFn(t *transport.Transport) ([]bubbleTable.Row, error) {
 	return rows, nil
 }
 
+// SearchFn searches for a query string in the log rows and returns the matching rows.
 func SearchFn(query string, rows []bubbleTable.Row) []bubbleTable.Row {
 	result := make([]bubbleTable.Row, 0, len(rows))
 	for _, row := range rows {
@@ -52,6 +56,7 @@ func SearchFn(query string, rows []bubbleTable.Row) []bubbleTable.Row {
 	return result
 }
 
+// GetFilteredFields returns the input fields for filtering the log table based on the provided width.
 func GetFilteredFields(width int) []textinput.Model {
 	inputs := make([]textinput.Model, 3)
 	for i := range len(inputs) {
@@ -74,7 +79,7 @@ func GetFilteredFields(width int) []textinput.Model {
 				if s != "" {
 					levels := "ERROR,INFO,WARNING,DEBUG"
 					if !strings.Contains(s, levels) {
-						return fmt.Errorf("Uknow level: %s. Possible levels: %s", s, levels)
+						return fmt.Errorf("unknown level: %s. Possible levels: %s", s, levels)
 					}
 				}
 				return nil
@@ -85,6 +90,7 @@ func GetFilteredFields(width int) []textinput.Model {
 	return inputs
 }
 
+// GetColumns returns the column definitions for the log table based on the provided width.
 func GetColumns(width int) []bubbleTable.Column {
 	return []bubbleTable.Column{
 		{
@@ -102,6 +108,7 @@ func GetColumns(width int) []bubbleTable.Column {
 	}
 }
 
+// FilterFn filters the log rows based on the provided input fields (start date, end date, and level).
 func FilterFn(inputs []textinput.Model, rows []bubbleTable.Row) ([]bubbleTable.Row, error) {
 	result := make([]bubbleTable.Row, 0)
 	if inputs[0].Err != nil {
@@ -111,16 +118,9 @@ func FilterFn(inputs []textinput.Model, rows []bubbleTable.Row) ([]bubbleTable.R
 		return nil, inputs[1].Err
 	}
 
-	// Skip errors because inputs use ValidateTimeFunc which use ParseTime.
-	startTime, _ := util.ParseTime(inputs[0].Value())
-	endTime, _ := util.ParseTime(inputs[1].Value())
-
-	if !endTime.IsZero() && !startTime.IsZero() {
-		if endTime.Before(startTime) {
-			return []bubbleTable.Row{}, fmt.Errorf("Start date is after end date: %s > %s",
-				startTime.Format(time.DateTime),
-				endTime.Format(time.DateTime))
-		}
+	startTime, endTime, err := parseTimeFilter(inputs)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, row := range rows {
@@ -149,6 +149,27 @@ func FilterFn(inputs []textinput.Model, rows []bubbleTable.Row) ([]bubbleTable.R
 	return result, nil
 }
 
+func parseTimeFilter(inputs []textinput.Model) (time.Time, time.Time, error) {
+	startTime, err := util.ParseTime(inputs[0].Value())
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	endTime, err := util.ParseTime(inputs[1].Value())
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+
+	if !endTime.IsZero() && !startTime.IsZero() {
+		if endTime.Before(startTime) {
+			return time.Time{}, time.Time{}, fmt.Errorf("start date is after end date: %s > %s",
+				startTime.Format(time.DateTime),
+				endTime.Format(time.DateTime))
+		}
+	}
+	return startTime, endTime, nil
+}
+
+// SortFn sorts the log rows based on the specified column index and order.
 func SortFn(index int, r []bubbleTable.Row, asc bool) []bubbleTable.Row {
 	switch index {
 	case 0: // Time
@@ -174,7 +195,8 @@ func SortFn(index int, r []bubbleTable.Row, asc bool) []bubbleTable.Row {
 	return r
 }
 
-func LogButtonsHandler(index int, m table.TableModel) (table.TableModel, tea.Cmd) {
+// LogButtonsHandler handles button actions for the log table.
+func LogButtonsHandler(index int, m table.Model) (table.Model, tea.Cmd) {
 	switch index {
 	case 0: // View
 		return m, func() tea.Msg {
@@ -210,10 +232,9 @@ func LogButtonsHandler(index int, m table.TableModel) (table.TableModel, tea.Cmd
 	return m, nil
 }
 
-// Create new table for server logs.
-func New(w, h int, t *transport.Transport) (table.TableModel, error) {
-	buttons := make([]string, 0)
-	buttons = []string{
+// New creates a new table for server logs.
+func New(w, h int, t *transport.Transport) (table.Model, error) {
+	buttons := []string{
 		fmt.Sprintf("View %c ", '\uebb7'),
 		fmt.Sprintf("Filter %c ", '\ueaf1'),
 		fmt.Sprintf("Sort %c ", '\ueaf1'),
@@ -225,6 +246,7 @@ func New(w, h int, t *transport.Transport) (table.TableModel, error) {
 	return table.NewModel(NewDescriptor(w), w, h, buttons, ParseLogs(t), LogButtonsHandler, "Logs"), nil
 }
 
+// ParseLogs retrieves logs from the transport and converts them into table rows.
 func ParseLogs(t *transport.Transport) []bubbleTable.Row {
 	rows := make([]bubbleTable.Row, 0)
 	logs, err := t.GetAllLogs()
@@ -241,6 +263,7 @@ func ParseLogs(t *transport.Transport) []bubbleTable.Row {
 	return rows
 }
 
+// WaitforLogs listens for incoming log messages from the transport and returns a tea.Cmd.
 func WaitforLogs(msgs <-chan transport.LogMsg) tea.Cmd {
 	return func() tea.Msg {
 		msg := <-msgs
@@ -248,6 +271,7 @@ func WaitforLogs(msgs <-chan transport.LogMsg) tea.Cmd {
 	}
 }
 
+// LogMsg represents a log message with a row of data for the table.
 type LogMsg struct {
 	Row bubbleTable.Row
 }

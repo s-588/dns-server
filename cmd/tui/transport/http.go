@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/prionis/dns-server/cmd/tui/structs"
-	"github.com/prionis/dns-server/proto/crud/genproto/crudpb"
+	"github.com/prionis/dns-server/proto/genproto/crudpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -22,7 +23,12 @@ func (t Transport) GetAllRRs() ([]structs.RR, error) {
 	if err != nil {
 		return []structs.RR{}, fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -45,7 +51,7 @@ func (t Transport) GetAllRRs() ([]structs.RR, error) {
 			Data:   record.Data,
 			Type:   record.Type,
 			Class:  record.Class,
-			TTL:    record.TimeToLive,
+			TTL:    record.Ttl,
 		})
 	}
 	return records, nil
@@ -60,6 +66,9 @@ func (t Transport) UpdateUser(u structs.User) error {
 		Role:      u.Role,
 		Password:  u.Password,
 	})
+	if err != nil {
+		return fmt.Errorf("can't marshal user: %w", err)
+	}
 
 	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+"/api/users/", bytes.NewReader(body))
 	if err != nil {
@@ -71,7 +80,12 @@ func (t Transport) UpdateUser(u structs.User) error {
 	if err != nil {
 		return fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -84,17 +98,22 @@ func (t Transport) UpdateUser(u structs.User) error {
 	return nil
 }
 
+// UpdateRR sends a PATCH request to the server to update an existing resource record.
+// It returns an error if the request fails or if the server responds with a non-OK status.
 func (t Transport) UpdateRR(rr structs.RR) error {
 	body, err := proto.Marshal(&crudpb.ResourceRecord{
-		Id:         rr.ID,
-		Domain:     rr.Domain,
-		Data:       rr.Data,
-		Type:       rr.Type,
-		Class:      rr.Class,
-		TimeToLive: rr.TTL,
+		Id:     rr.ID,
+		Domain: rr.Domain,
+		Data:   rr.Data,
+		Type:   rr.Type,
+		Class:  rr.Class,
+		Ttl:    rr.TTL,
 	})
+	if err != nil {
+		return fmt.Errorf("can't marshal resource record: %w", err)
+	}
 
-	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+"/api/rrs/"+strconv.FormatInt(int64(rr.ID), 10), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+"/api/rrs/"+strconv.FormatInt(rr.ID, 10), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("can't create new request: %w", err)
 	}
@@ -104,7 +123,12 @@ func (t Transport) UpdateRR(rr structs.RR) error {
 	if err != nil {
 		return fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -117,14 +141,19 @@ func (t Transport) UpdateRR(rr structs.RR) error {
 	return nil
 }
 
+// AddRR sends a POST request to the server to add a new resource record.
+// It returns the added record or an error.
 func (t Transport) AddRR(rr structs.RR) (structs.RR, error) {
 	body, err := proto.Marshal(&crudpb.ResourceRecord{
-		Domain:     rr.Domain,
-		Data:       rr.Data,
-		Type:       rr.Type,
-		Class:      rr.Class,
-		TimeToLive: rr.TTL,
+		Domain: rr.Domain,
+		Data:   rr.Data,
+		Type:   rr.Type,
+		Class:  rr.Class,
+		Ttl:    rr.TTL,
 	})
+	if err != nil {
+		return structs.RR{}, fmt.Errorf("can't marshal message: %w", err)
+	}
 
 	req, err := http.NewRequest(http.MethodPost, t.httpAddr+"/api/rrs/", bytes.NewReader(body))
 	if err != nil {
@@ -136,7 +165,12 @@ func (t Transport) AddRR(rr structs.RR) (structs.RR, error) {
 	if err != nil {
 		return structs.RR{}, fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -159,12 +193,14 @@ func (t Transport) AddRR(rr structs.RR) (structs.RR, error) {
 		Data:   record.Data,
 		Type:   record.Type,
 		Class:  record.Class,
-		TTL:    record.TimeToLive,
+		TTL:    record.Ttl,
 	}, nil
 }
 
-func (t Transport) DeleteRR(id int32) error {
-	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+"/api/rrs/"+strconv.FormatInt(int64(id), 10), http.NoBody)
+// DeleteRR sends a DELETE request to the server to delete a resource record by ID.
+// It returns an error if the request fails or if the server responds with a non-OK status.
+func (t Transport) DeleteRR(id int64) error {
+	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+"/api/rrs/"+strconv.FormatInt(id, 10), http.NoBody)
 	if err != nil {
 		return fmt.Errorf("can't create new request: %w", err)
 	}
@@ -173,7 +209,12 @@ func (t Transport) DeleteRR(id int32) error {
 	if err != nil {
 		return fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -186,6 +227,8 @@ func (t Transport) DeleteRR(id int32) error {
 	return nil
 }
 
+// RegisterNewUser sends a registration request to the server with the provided user information
+// and returns the registered user or an error.
 func (t Transport) RegisterNewUser(user structs.User) (structs.User, error) {
 	credentials := &crudpb.Register{
 		Login:     user.Login,
@@ -211,7 +254,12 @@ func (t Transport) RegisterNewUser(user structs.User) (structs.User, error) {
 	if err != nil {
 		return structs.User{}, fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -237,6 +285,8 @@ func (t Transport) RegisterNewUser(user structs.User) (structs.User, error) {
 	}, nil
 }
 
+// Login sends a login request to the server with the provided credentials
+// and returns the authenticated user or an error.
 func (t Transport) Login(login, password string) (*crudpb.User, error) {
 	credentials := &crudpb.Login{
 		Username: login,
@@ -259,7 +309,12 @@ func (t Transport) Login(login, password string) (*crudpb.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -277,6 +332,7 @@ func (t Transport) Login(login, password string) (*crudpb.User, error) {
 	return user, nil
 }
 
+// GetAllUsers retrieves all users from the server.
 func (t Transport) GetAllUsers() ([]structs.User, error) {
 	req, err := http.NewRequest(http.MethodGet, t.httpAddr+"/api/users/all", http.NoBody)
 	if err != nil {
@@ -289,7 +345,12 @@ func (t Transport) GetAllUsers() ([]structs.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -317,8 +378,10 @@ func (t Transport) GetAllUsers() ([]structs.User, error) {
 	return result, nil
 }
 
-func (t Transport) DeleteUser(id int32) error {
-	req, err := http.NewRequest(http.MethodGet, t.httpAddr+"/api/users/"+strconv.FormatInt(int64(id), 10), http.NoBody)
+// DeleteUser sends a DELETE request to the server to delete a user by ID.
+// It returns an error if the request fails or if the server responds with a non-OK status.
+func (t Transport) DeleteUser(id int64) error {
+	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+"/api/users/"+strconv.FormatInt(id, 10), http.NoBody)
 	if err != nil {
 		return fmt.Errorf("can't create new request: %w", err)
 	}
@@ -327,7 +390,12 @@ func (t Transport) DeleteUser(id int32) error {
 	if err != nil {
 		return fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -340,6 +408,7 @@ func (t Transport) DeleteUser(id int32) error {
 	return nil
 }
 
+// GetAllLogs retrieves all logs from the server.
 func (t Transport) GetAllLogs() ([]structs.Log, error) {
 	req, err := http.NewRequest(http.MethodGet, t.httpAddr+"/api/logs/all", http.NoBody)
 	if err != nil {
@@ -352,7 +421,12 @@ func (t Transport) GetAllLogs() ([]structs.Log, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't make request to the server: %w", err)
 	}
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
+		}
+	}()
 
 	msg, err := io.ReadAll(r.Body)
 	if err != nil {

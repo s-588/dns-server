@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,12 +18,12 @@ func (s Server) loggerMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
-				slog.Info(fmt.Sprintf("%s %s from %s",
-					r.Method, r.URL.String(), r.RemoteAddr))
+				slog.Info("Request", "method", r.Method, "path", r.URL.String(), "addr",
+					r.RemoteAddr)
 			}()
 			next.ServeHTTP(w, r)
 		})
-		return http.HandlerFunc(fn)
+		return fn
 	}
 }
 
@@ -36,7 +35,7 @@ func (s Server) timeoutMiddleware(t time.Duration) func(http.Handler) http.Handl
 				cancel()
 				if ctx.Err() == context.DeadlineExceeded {
 					w.WriteHeader(http.StatusGatewayTimeout)
-					slog.Error("timeout connection with " + r.RemoteAddr)
+					slog.Error("connection timeout", "addr", r.RemoteAddr)
 				}
 			}()
 
@@ -71,7 +70,7 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("jwt")
 		if err != nil {
-			slog.Error("getting jwt token cookie from request: " + err.Error())
+			slog.Error("can't retrieve jwt token from request", "error", err)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -87,27 +86,32 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 			return []byte(secret), nil
 		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 		if err != nil {
-			slog.Error("can't parse JWT token: " + err.Error())
+			slog.Error("can't parse JWT token", "error", err)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			slog.Error("can't retrive claims from token: " + err.Error())
+			slog.Error("can't retrieve claims from token", "error", err)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		login := claims["login"].(string)
+		login, ok := claims["login"].(string)
+		if !ok {
+			slog.Error("can't retrieve login from claims")
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		user, err := s.db.GetUser(context.Background(), login)
 		if err != nil {
-			slog.Error("can't retrive user from database: " + err.Error())
+			slog.Error("can't retrieve user from database", "error", err.Error())
 			http.Error(w, "Internal error, try later", http.StatusInternalServerError)
 			return
 		}
 
-		r = r.WithContext(context.WithValue(r.Context(), "user", user))
+		r = r.WithContext(context.WithValue(r.Context(), contextKeyUser, user))
 		next.ServeHTTP(w, r)
 	})
 }

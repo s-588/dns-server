@@ -8,14 +8,17 @@ import (
 	"github.com/prionis/dns-server/internal/dns/codec"
 )
 
+// TXT represents a DNS TXT record.
 type TXT struct {
 	data []byte
 }
 
+// Type returns the DNS record type for TXT records.
 func (txt TXT) Type() Type {
 	return TypeTXT
 }
 
+// MarshalBinary marshals the TXT record into binary format.
 func (txt TXT) MarshalBinary() ([]byte, error) {
 	if len(txt.data) == 0 {
 		return nil, errors.New("empty txt data")
@@ -25,6 +28,7 @@ func (txt TXT) MarshalBinary() ([]byte, error) {
 	return w.Buffer(), nil
 }
 
+// UnmarshalBinary unmarshals the binary data into the TXT record.
 func (txt *TXT) UnmarshalBinary(data []byte) error {
 	txt.data = data
 	return nil
