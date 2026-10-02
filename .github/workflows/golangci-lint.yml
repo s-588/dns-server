@@ -9,7 +9,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v2.13
+  GOLANGCI_LINT_VERSION: latest
 
 jobs:
   detect-modules:
