@@ -24,6 +24,10 @@ linters:
     - gosec
     - gocyclo
     - funlen
+  exclusions:
+    generated: strict
+    rules:
+      - path: _test\.go
 
   settings:
     errcheck:
