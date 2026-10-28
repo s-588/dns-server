@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -75,35 +76,14 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		secret := os.Getenv("JWT_SECRET")
-		if secret == "" {
-			slog.Error("JWT_SECRET environment variable is not set")
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (any, error) {
-			return []byte(secret), nil
-		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+		token := cookie.Value
+		login, err := parseJWT(token)
 		if err != nil {
-			slog.Error("can't parse JWT token", "error", err)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			slog.Error("can't parse JWT token", "error", err.Error())
+			http.Error(w, "Authentication error", http.StatusForbidden)
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			slog.Error("can't retrieve claims from token", "error", err)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		login, ok := claims["login"].(string)
-		if !ok {
-			slog.Error("can't retrieve login from claims")
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
 		user, err := s.db.GetUser(context.Background(), login)
 		if err != nil {
 			slog.Error("can't retrieve user from database", "error", err.Error())
@@ -114,6 +94,34 @@ func (s Server) authenticationMiddleware(next http.Handler) http.Handler {
 		r = r.WithContext(context.WithValue(r.Context(), contextKeyUser, user))
 		next.ServeHTTP(w, r)
 	})
+}
+
+// parseJWT parses JWT from string and returns user's login
+func parseJWT(tokenStr string) (string, error) {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return "", fmt.Errorf("JWT_SECRET environment variable is not set")
+	}
+
+	token, err := jwt.Parse(tokenStr,
+		func(t *jwt.Token) (any, error) {
+			return []byte(secret), nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	if err != nil {
+		return "", fmt.Errorf("parse JWT token: %w", err)
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("can't retrieve claims from token")
+	}
+
+	login, ok := claims["login"].(string)
+	if !ok {
+		return "", fmt.Errorf("can't format login to string")
+	}
+	return login, nil
 }
 
 func prometheusMiddleware(m *Metrics) func(http.Handler) http.Handler {

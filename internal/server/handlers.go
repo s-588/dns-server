@@ -17,11 +17,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/prionis/dns-server/internal/database"
 	"github.com/prionis/dns-server/internal/dns"
 	"github.com/prionis/dns-server/proto/genproto/crudpb"
-	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -97,6 +95,11 @@ func (s Server) dnsHandler(msg []byte) []byte {
 }
 
 func parseRR(a database.ResourceRecord) (dns.RR, error) {
+	if !dns.IsValidDomain(a.Domain) {
+		slog.Error("incorrect domain", "domain", a.Domain)
+		return dns.RR{}, fmt.Errorf("incorrect domain")
+	}
+
 	t, ok := dns.ParseType(a.Type)
 	if !ok {
 		slog.Error("uknown type", "domain", a.Domain, "type", a.Type)
@@ -162,18 +165,7 @@ func (s Server) parseLoginRequest(r *http.Request) (*crudpb.Login, error) {
 func (s Server) authenticate(ctx context.Context, credentials *crudpb.Login) (database.User, error) {
 	user, err := s.db.CheckUserPassword(ctx, credentials.Username, credentials.Password)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			s.metrics.LoginAttemptsTotal.WithLabelValues("invalid_user").Inc()
-			return database.User{}, fmt.Errorf("user not found")
-		}
-
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			s.metrics.LoginAttemptsTotal.WithLabelValues("wrong_password").Inc()
-			return database.User{}, fmt.Errorf("incorrect password")
-		}
-
-		return database.User{}, fmt.Errorf("something went wrong")
+		return database.User{}, err
 	}
 
 	return user, nil
@@ -224,7 +216,7 @@ func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := s.authenticate(r.Context(), credentials)
 	if err != nil {
 		slog.Error("authentication failed", "error", err)
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -302,21 +294,7 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		}, credentials.Password)
 	if err != nil {
 		slog.Error("can't register new user", "login", credentials.Login, "error", err)
-		var pgErr *pgconn.PgError
-		var errStr string
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23502", "23503": // not_null_violation
-				errStr = "Uknown role"
-
-			case "23505": // unique_violation
-				errStr = "Already exist"
-
-			default:
-				errStr = "Can't update user"
-			}
-		}
-		http.Error(w, errStr, http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -360,7 +338,7 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 	rr, err := s.db.GetRecord(r.Context(), id)
 	if err != nil {
 		slog.Error("can't get user", "id", id, "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 	protoRR := &crudpb.ResourceRecord{
@@ -397,7 +375,7 @@ func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
 	rrs, err := s.db.GetAllRecords(r.Context())
 	if err != nil {
 		slog.Error("can't get records from database", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -442,7 +420,7 @@ func (s Server) getUserHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := s.db.GetUser(r.Context(), id)
 	if err != nil {
 		slog.Error("can't get user", "id", id, "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 	u := &crudpb.User{
@@ -472,7 +450,7 @@ func (s Server) getAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 	users, err := s.db.GetAllUsers(r.Context())
 	if err != nil {
 		slog.Error("can't get records form databas", "error", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -539,7 +517,7 @@ func (s Server) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	err = s.db.DeleteUser(r.Context(), id)
 	if err != nil {
 		slog.Error("can't delete user: " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -588,22 +566,7 @@ func (s Server) patchUserHandler(w http.ResponseWriter, r *http.Request) {
 		Role:      user.Role,
 	}, user.Password)
 	if err != nil {
-		slog.Error("can't update user", "error", err)
-		var pgErr *pgconn.PgError
-		var errStr string
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23502", "23503": // not_null_violation
-				errStr = "Uknown role"
-
-			case "23505": // unique_violation
-				errStr = "Already exist"
-
-			default:
-				errStr = "Can't update user"
-			}
-		}
-		http.Error(w, errStr, http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -630,8 +593,7 @@ func (s Server) deleteRRHandler(w http.ResponseWriter, r *http.Request) {
 
 	err = s.db.DeleteRecord(r.Context(), id)
 	if err != nil {
-		slog.Error("can't delete resource record: " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -680,22 +642,7 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 			TTL:    rr.Ttl,
 		})
 	if err != nil {
-		slog.Error("can't add resource record: " + err.Error())
-		var pgErr *pgconn.PgError
-		var errStr string
-		if errors.As(err, &pgErr) {
-			switch pgErr.Code {
-			case "23502", "23503": // not_null_violation
-				errStr = "Uknown type or class"
-
-			case "23505": // unique_violation
-				errStr = "Already exist"
-
-			default:
-				errStr = "Can't update"
-			}
-		}
-		http.Error(w, errStr, http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -766,8 +713,7 @@ func (s Server) patchRRHandler(w http.ResponseWriter, r *http.Request) {
 			TTL:    rr.Ttl,
 		})
 	if err != nil {
-		slog.Error("can't update user: " + err.Error())
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		WriteDBError(w, err)
 		return
 	}
 
@@ -840,4 +786,31 @@ func (s Server) getAllLogsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("GET all logs, " +
 		strconv.FormatInt(int64(len(result.Logs)), 10) + " logs returned")
+}
+
+// WriteDBError maps a database-layer error to an HTTP response.
+// It logs the original error and writes an appropriate status + message.
+func WriteDBError(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+
+	slog.Error("database error", "error", err)
+
+	switch {
+	case errors.Is(err, database.ErrAlreadyExists):
+		http.Error(w, "Already exists", http.StatusConflict)
+
+	case errors.Is(err, database.ErrNotFound):
+		http.Error(w, "Not found", http.StatusNotFound)
+
+	case errors.Is(err, database.ErrForeignKey),
+		errors.Is(err, database.ErrNotNullViolation),
+		errors.Is(err, database.ErrCheckViolation),
+		errors.Is(err, database.ErrInvalidInput):
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+
+	default:
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }

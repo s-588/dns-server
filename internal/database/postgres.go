@@ -3,10 +3,12 @@ package database
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"math"
 	"os"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -14,6 +16,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/prionis/dns-server/internal/database/sqlc"
+)
+
+// Errors returned by the repository.
+var (
+	ErrNotFound         = errors.New("not found")
+	ErrAlreadyExists    = errors.New("already exists")
+	ErrForeignKey       = errors.New("foreign key violation")
+	ErrNotNullViolation = errors.New("not null violation")
+	ErrCheckViolation   = errors.New("check violation")
+	ErrInvalidInput     = errors.New("invalid input")
 )
 
 // Constants for validating inputs
@@ -69,7 +81,7 @@ func GetConnectionString() string {
 func (repo Postgres) GetRecord(ctx context.Context, id int64) (ResourceRecord, error) {
 	rr, err := repo.db.GetResourceRecordByID(ctx, id)
 	if err != nil {
-		return ResourceRecord{}, err
+		return ResourceRecord{}, MapPostgresError(err)
 	}
 	ttl := rr.TimeToLive.Int64
 	if ttl < 0 || ttl > math.MaxUint32 {
@@ -95,7 +107,7 @@ func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (int64, e
 		TimeToLive: pgtype.Int8{Int64: int64(rr.TTL), Valid: true},
 	})
 	if err != nil {
-		return 0, err
+		return 0, MapPostgresError(err)
 	}
 	return id, nil
 }
@@ -104,7 +116,7 @@ func (repo Postgres) AddRecord(ctx context.Context, rr ResourceRecord) (int64, e
 func (repo Postgres) GetAllRecords(ctx context.Context) ([]ResourceRecord, error) {
 	rrs, err := repo.db.GetAllResourceRecord(ctx)
 	if err != nil {
-		return nil, err
+		return nil, MapPostgresError(err)
 	}
 
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
@@ -136,7 +148,7 @@ func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error 
 		TimeToLive: pgtype.Int8{Int64: int64(rr.TTL), Valid: true},
 	})
 	if err != nil {
-		return err
+		return MapPostgresError(err)
 	}
 
 	return nil
@@ -146,7 +158,7 @@ func (repo Postgres) UpdateRecord(ctx context.Context, rr ResourceRecord) error 
 func (repo Postgres) DeleteRecord(ctx context.Context, id int64) error {
 	err := repo.db.DeleteResourceRecord(ctx, id)
 	if err != nil {
-		return err
+		return MapPostgresError(err)
 	}
 
 	return nil
@@ -156,7 +168,7 @@ func (repo Postgres) DeleteRecord(ctx context.Context, id int64) error {
 func (repo Postgres) FindRecords(ctx context.Context, name, rrType string) ([]ResourceRecord, error) {
 	rrs, err := repo.db.GetResourceRecords(ctx, sqlc.GetResourceRecordsParams{Domain: name, Type: rrType})
 	if err != nil {
-		return nil, err
+		return nil, MapPostgresError(err)
 	}
 
 	resourceRecords := make([]ResourceRecord, 0, len(rrs))
@@ -180,7 +192,7 @@ func (repo Postgres) FindRecords(ctx context.Context, name, rrType string) ([]Re
 func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
-		return User{}, fmt.Errorf("can't get user from database: %w", err)
+		return User{}, MapPostgresError(err)
 	}
 
 	return User{
@@ -196,7 +208,7 @@ func (repo Postgres) GetUser(ctx context.Context, login string) (User, error) {
 func (repo Postgres) GetAllUsers(ctx context.Context) ([]User, error) {
 	usersRows, err := repo.db.GetAllUsers(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, MapPostgresError(err)
 	}
 
 	users := make([]User, 0, len(usersRows))
@@ -233,7 +245,7 @@ func (repo Postgres) UpdateUser(ctx context.Context, user User, password string)
 func (repo Postgres) AddUser(ctx context.Context, user User, password string) (int64, error) {
 	err := parseUserCredentials(user, password)
 	if err != nil {
-		return 0, err
+		return 0, MapPostgresError(err)
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
@@ -249,7 +261,7 @@ func (repo Postgres) AddUser(ctx context.Context, user User, password string) (i
 		Password:  string(hash),
 	})
 	if err != nil {
-		return 0, fmt.Errorf("can't register new user: %w", err)
+		return 0, MapPostgresError(err)
 	}
 	return id, nil
 }
@@ -297,7 +309,7 @@ func parseUserCredentials(user User, password string) error {
 func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) (User, error) {
 	user, err := repo.db.GetUser(ctx, login)
 	if err != nil {
-		return User{}, fmt.Errorf("can't get user from database: %w", err)
+		return User{}, MapPostgresError(err)
 	}
 
 	return User{
@@ -311,7 +323,7 @@ func (repo Postgres) CheckUserPassword(ctx context.Context, login, pass string) 
 
 // DeleteUser delete user with provided id.
 func (repo Postgres) DeleteUser(ctx context.Context, id int64) error {
-	return repo.db.DeleteUser(ctx, id)
+	return MapPostgresError(repo.db.DeleteUser(ctx, id))
 }
 
 // initDB methods connects to Postgres and execute migrations
@@ -326,4 +338,35 @@ func (p Postgres) initDB() error {
 	}
 
 	return nil
+}
+
+// MapPostgresError converts a pgx/pgconn error into a domain error.
+// Unknown errors are wrapped so the caller can still inspect the original.
+func MapPostgresError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		// not a Postgres error (network, context cancelled, etc.)
+		return fmt.Errorf("database error: %w", err)
+	}
+
+	switch pgErr.Code {
+	case "23505": // unique_violation
+		return fmt.Errorf("%w: %s", ErrAlreadyExists, pgErr.ConstraintName)
+
+	case "23503": // foreign_key_violation
+		return fmt.Errorf("%w: %s", ErrForeignKey, pgErr.ConstraintName)
+
+	case "23502": // not_null_violation
+		return fmt.Errorf("%w: %s", ErrNotNullViolation, pgErr.ColumnName)
+
+	case "23514": // check_violation
+		return fmt.Errorf("%w: %s", ErrCheckViolation, pgErr.ConstraintName)
+
+	default:
+		return fmt.Errorf("database error (%s): %w", pgErr.Code, err)
+	}
 }
