@@ -16,6 +16,13 @@ import (
 	"github.com/prionis/dns-server/internal/database/sqlc"
 )
 
+// Constants for validating inputs
+const (
+	minimalNameLength = 2
+	minimalLength     = 4
+	maxLength         = 14
+)
+
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
@@ -224,24 +231,9 @@ func (repo Postgres) UpdateUser(ctx context.Context, user User, password string)
 
 // AddUser add user in the database and return this user with settled ID.
 func (repo Postgres) AddUser(ctx context.Context, user User, password string) (int64, error) {
-	if len(user.FirstName) < 2 {
-		return 0, fmt.Errorf("can't use name %s, the length less than 2", user.FirstName)
-	}
-
-	if len(user.LastName) < 2 {
-		return 0, fmt.Errorf("can't use last name %s, the length less than 2", user.LastName)
-	}
-
-	if len(user.Role) < 4 {
-		return 0, fmt.Errorf("length of role can't be less than 4")
-	}
-
-	if len(password) < 4 {
-		return 0, fmt.Errorf("password is too weak, it must contain at least " +
-			"1 special symbol and 1 number and 8 symbols in total")
-	}
-	if len(password) > 71 {
-		return 0, fmt.Errorf("password is too long, 70 symbols max")
+	err := parseUserCredentials(user, password)
+	if err != nil {
+		return 0, err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
@@ -260,6 +252,45 @@ func (repo Postgres) AddUser(ctx context.Context, user User, password string) (i
 		return 0, fmt.Errorf("can't register new user: %w", err)
 	}
 	return id, nil
+}
+
+func parseUserCredentials(user User, password string) error {
+	if len(user.Login) < minimalLength {
+		return fmt.Errorf("too short user name")
+	}
+	if len(user.Login) > maxLength {
+		return fmt.Errorf("too long user name")
+	}
+
+	if len(user.FirstName) < minimalNameLength {
+		return fmt.Errorf("too short first name")
+	}
+
+	if len(user.FirstName) > maxLength {
+		return fmt.Errorf("too long first name")
+	}
+
+	if len(user.LastName) < minimalNameLength {
+		return fmt.Errorf("too short last name")
+	}
+	if len(user.LastName) > maxLength {
+		return fmt.Errorf("too long last name")
+	}
+
+	if len(user.Role) < minimalLength {
+		return fmt.Errorf("role is too short")
+	}
+	if len(user.Role) > maxLength {
+		return fmt.Errorf("role is too long")
+	}
+
+	if len(password) < minimalLength {
+		return fmt.Errorf("password is too short, must be %d symbols minimum", minimalLength)
+	}
+	if len(password) > 70 {
+		return fmt.Errorf("password is too long")
+	}
+	return nil
 }
 
 // CheckUserPassword check if the password is correct for provided user.
