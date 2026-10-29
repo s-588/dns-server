@@ -24,9 +24,9 @@ func IsValidDomain(name string) bool {
 			return false
 		}
 		for _, c := range label {
-			if !(unicode.Is(unicode.Latin, c) ||
-				unicode.IsDigit(c) ||
-				c == '-') {
+			if !unicode.Is(unicode.Latin, c) &&
+				!unicode.IsDigit(c) &&
+				c != '-' {
 				return false
 			}
 		}

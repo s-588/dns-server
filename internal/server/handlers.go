@@ -59,7 +59,7 @@ func (s Server) dnsHandler(msg []byte) []byte {
 				continue
 			}
 			slog.Info("found answer", "RR", rr)
-			req.Answers = append(req.Answers, rr)
+			resp.Answers = append(resp.Answers, rr)
 		}
 		s.metrics.DNSQueriesTotal.WithLabelValues(
 			q.Type.String(),
@@ -79,7 +79,7 @@ func (s Server) dnsHandler(msg []byte) []byte {
 	}
 	resp.Header.QDCount = uint16(l)
 
-	l = len(req.Answers)
+	l = len(resp.Answers)
 	if l < 0 || l > math.MaxUint16 {
 		slog.Error("too many answers, setting to max", "count", l)
 		l = math.MaxUint16
@@ -330,9 +330,11 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.ParseInt(idStr, 10, 32)
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		slog.Error("can't parse id", "id", idStr, "error", err)
+		http.Error(w, "Incorrect ID", http.StatusBadRequest)
+		return
 	}
 
 	rr, err := s.db.GetRecord(r.Context(), id)
@@ -410,16 +412,16 @@ func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
 
 // getUserHandler handle get user requests and return user with provided ID.
 func (s Server) getUserHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
+	login := r.PathValue("login")
+	if login == "" {
 		slog.Error("login is not specified in the path")
 		http.Error(w, "Login of the user is not specified in the path", http.StatusBadRequest)
 		return
 	}
 
-	user, err := s.db.GetUser(r.Context(), id)
+	user, err := s.db.GetUser(r.Context(), login)
 	if err != nil {
-		slog.Error("can't get user", "id", id, "error", err)
+		slog.Error("can't get user", "id", login, "error", err)
 		WriteDBError(w, err)
 		return
 	}
@@ -521,7 +523,9 @@ func (s Server) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte(html.EscapeString("User with id " + pathID + "successful deleted")))
+	_, err = w.Write([]byte(
+		html.EscapeString(
+			fmt.Sprintf("User with id %d successful deleted", id))))
 	if err != nil {
 		slog.Error("can't write response for user deletion", "error", err)
 	}
@@ -597,7 +601,9 @@ func (s Server) deleteRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte(html.EscapeString("Resource record with id " + pathID + "successful deleted")))
+	_, err = w.Write([]byte(
+		html.EscapeString(
+			fmt.Sprintf("Resource record with id %d successful deleted", id))))
 	if err != nil {
 		slog.Error("can't write response for resource record deletion", "error", err.Error())
 	}
