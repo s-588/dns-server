@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -11,10 +10,8 @@ import (
 
 // LoadEnvs loads environment variables from the "dns-server.env" and "postgres.env" files.
 func LoadEnvs() {
-	err := godotenv.Load("dns-server.env", "postgres.env")
-	if err != nil {
-		panic(fmt.Errorf("failed to load environment variables: %w", err))
-	}
+	// skip error because it can run in the environment that don't need for loading envs
+	_ = godotenv.Load("dns-server.env", "postgres.env")
 }
 
 // OptionsFromEnv builds functional options from environment variables.
