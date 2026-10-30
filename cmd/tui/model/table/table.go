@@ -94,7 +94,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "up", "shift+tab", "k", "down", "tab", "j":
-			m, cmd = processVerticalMoves(m, cmd, msg.String())
+			m, cmd = processVerticalMoves(m, cmd, msg)
 			cmds = append(cmds, cmd)
 
 		case "left", "h":
@@ -134,8 +134,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func processVerticalMoves(m Model, cmd tea.Cmd, button string) (Model, tea.Cmd) {
-	switch button {
+func processVerticalMoves(m Model, cmd tea.Cmd, button tea.KeyMsg) (Model, tea.Cmd) {
+	switch button.String() {
 	case "up", "shift+tab", "k":
 		if m.Table.Focused() {
 			m.Table, cmd = m.Table.Update(button)

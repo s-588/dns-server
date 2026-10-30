@@ -12,9 +12,8 @@ import (
 
 // Model represents the model for managing popup messages in the TUI.
 type Model struct {
-	maxID   int      // Unique identifier for the next popup message
-	MsgChan chan Msg // Channel for receiving popup messages
-	msgs    []Msg    // Slice of currently active popup messages
+	maxID int   // Unique identifier for the next popup message
+	msgs  []Msg // Slice of currently active popup messages
 }
 
 // Msg represents a popup message with an ID, level, message content, duration, and timer.
@@ -34,14 +33,13 @@ type ClearMsg struct {
 // NewModel creates a new instance of PopupModel.
 func NewModel() Model {
 	return Model{
-		MsgChan: make(chan Msg, 1),
-		msgs:    make([]Msg, 0),
+		msgs: make([]Msg, 0),
 	}
 }
 
 // Init initializes the popup model and starts listening for incoming popup messages.
 func (m Model) Init() tea.Cmd {
-	return ListenForPopupMsg(m.MsgChan)
+	return nil
 }
 
 // Update handles incoming messages and updates the popup model accordingly.
@@ -75,7 +73,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if idx != -1 {
 			m.msgs = slices.Delete(m.msgs, idx, idx+1)
 		}
-		cmds = append(cmds, ListenForPopupMsg(m.MsgChan))
 	}
 
 	return m, tea.Batch(cmds...)
@@ -87,40 +84,30 @@ func (p Model) View() string {
 		return ""
 	}
 
-	s := strings.Builder{}
+	var out strings.Builder
 	for _, msg := range p.msgs {
-		s := strings.Builder{}
+		if msg.Level == "" {
+			continue
+		}
 		level := msg.Level[:1] + strings.ToLower(msg.Level[1:])
-		_, err := s.WriteString(level + ": ")
-		if err != nil {
-			return ""
-		}
-		_, err = s.WriteString(msg.Msg)
-		if err != nil {
-			return ""
-		}
+		var body strings.Builder
+		body.WriteString(level)
+		body.WriteString(": ")
+		body.WriteString(msg.Msg)
+
 		switch msg.Level {
 		case "INFO":
-			return style.BlueBoarderStyle.Render(s.String())
-
+			out.WriteString(style.BlueBoarderStyle.Render(body.String()))
 		case "ERROR":
-			return style.RedBoarderStyle.Render(s.String())
-
+			out.WriteString(style.RedBoarderStyle.Render(body.String()))
 		case "WARNING":
-			return style.RedBoarderStyle.Render(s.String())
-
+			out.WriteString(style.RedBoarderStyle.Render(body.String()))
 		case "SUCCESS":
-			return style.GreenBoarderStyle.Render(s.String())
+			out.WriteString(style.GreenBoarderStyle.Render(body.String()))
 		}
+		out.WriteRune('\n')
 	}
-	return s.String()
-}
-
-// ListenForPopupMsg listens for a PopupMsg from the provided channel and returns it as a tea.Msg.
-func ListenForPopupMsg(msgs <-chan Msg) tea.Cmd {
-	return func() tea.Msg {
-		return <-msgs
-	}
+	return out.String()
 }
 
 // Warning creates a warning popup message with the specified message and duration.

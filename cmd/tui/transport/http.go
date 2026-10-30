@@ -7,41 +7,54 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/prionis/dns-server/cmd/tui/structs"
 	"github.com/prionis/dns-server/proto/genproto/crudpb"
 	"google.golang.org/protobuf/proto"
 )
 
-func (t Transport) GetAllRRs() ([]structs.RR, error) {
-	req, err := http.NewRequest(http.MethodGet, t.httpAddr+"/api/rrs/all", http.NoBody)
-	if err != nil {
-		return []structs.RR{}, fmt.Errorf("can't create new request: %w", err)
-	}
-
-	resp, err := t.HTTPClient.Do(req)
-	if err != nil {
-		return []structs.RR{}, fmt.Errorf("can't make request to the server: %w", err)
-	}
+// readResponse reads and closes resp.Body, returning the raw body on a 200
+// response or an *APIError otherwise.
+func readResponse(resp *http.Response, method, path string) ([]byte, error) {
 	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
+		if err := resp.Body.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
 		}
 	}()
-
-	msg, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return []structs.RR{}, fmt.Errorf("can't read response body: %w", err)
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return []structs.RR{}, fmt.Errorf("%s: %s", resp.Status, string(msg))
+		return body, &APIError{
+			Method:    method,
+			Path:      path,
+			Status:    resp.StatusCode,
+			ServerMsg: strings.TrimSpace(string(body)),
+		}
+	}
+	return body, nil
+}
+
+func (t Transport) GetAllRRs() ([]structs.RR, error) {
+	const path = "/api/rrs/all"
+	req, err := http.NewRequest(http.MethodGet, t.httpAddr+path, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("create %s %s request: %w", http.MethodGet, path, err)
+	}
+	resp, err := t.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &NetworkError{Method: http.MethodGet, Addr: t.httpAddr + path, Err: err}
+	}
+	msg, err := readResponse(resp, http.MethodGet, path)
+	if err != nil {
+		return nil, err
 	}
 
 	rrs := &crudpb.ResourceRecordCollection{}
-	err = proto.Unmarshal(msg, rrs)
-	if err != nil {
-		return nil, fmt.Errorf("can't unmarshal response: %w", err)
+	if err := proto.Unmarshal(msg, rrs); err != nil {
+		return nil, fmt.Errorf("unmarshal %s %s response: %w", http.MethodGet, path, err)
 	}
 	records := make([]structs.RR, 0, len(rrs.Records))
 	for _, record := range rrs.Records {
@@ -58,6 +71,7 @@ func (t Transport) GetAllRRs() ([]structs.RR, error) {
 }
 
 func (t Transport) UpdateUser(u structs.User) error {
+	const path = "/api/users/"
 	body, err := proto.Marshal(&crudpb.User{
 		Id:        u.ID,
 		Login:     u.Login,
@@ -67,40 +81,24 @@ func (t Transport) UpdateUser(u structs.User) error {
 		Password:  u.Password,
 	})
 	if err != nil {
-		return fmt.Errorf("can't marshal user: %w", err)
+		return fmt.Errorf("marshal user: %w", err)
 	}
-
-	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+"/api/users/", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+path, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("can't create new request: %w", err)
+		return fmt.Errorf("create %s %s request: %w", http.MethodPatch, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 
 	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("can't make request to the server: %w", err)
+		return &NetworkError{Method: http.MethodPatch, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("can't read response body: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: %s", resp.Status, string(msg))
-	}
-
-	return nil
+	_, err = readResponse(resp, http.MethodPatch, path)
+	return err
 }
 
-// UpdateRR sends a PATCH request to the server to update an existing resource record.
-// It returns an error if the request fails or if the server responds with a non-OK status.
 func (t Transport) UpdateRR(rr structs.RR) error {
+	path := "/api/rrs/" + strconv.FormatInt(rr.ID, 10)
 	body, err := proto.Marshal(&crudpb.ResourceRecord{
 		Id:     rr.ID,
 		Domain: rr.Domain,
@@ -110,40 +108,24 @@ func (t Transport) UpdateRR(rr structs.RR) error {
 		Ttl:    rr.TTL,
 	})
 	if err != nil {
-		return fmt.Errorf("can't marshal resource record: %w", err)
+		return fmt.Errorf("marshal resource record: %w", err)
 	}
-
-	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+"/api/rrs/"+strconv.FormatInt(rr.ID, 10), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPatch, t.httpAddr+path, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("can't create new request: %w", err)
+		return fmt.Errorf("create %s %s request: %w", http.MethodPatch, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 
 	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("can't make request to the server: %w", err)
+		return &NetworkError{Method: http.MethodPatch, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("can't read response body: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: %s", resp.Status, string(msg))
-	}
-
-	return nil
+	_, err = readResponse(resp, http.MethodPatch, path)
+	return err
 }
 
-// AddRR sends a POST request to the server to add a new resource record.
-// It returns the added record or an error.
 func (t Transport) AddRR(rr structs.RR) (structs.RR, error) {
+	const path = "/api/rrs/"
 	body, err := proto.Marshal(&crudpb.ResourceRecord{
 		Domain: rr.Domain,
 		Data:   rr.Data,
@@ -152,41 +134,27 @@ func (t Transport) AddRR(rr structs.RR) (structs.RR, error) {
 		Ttl:    rr.TTL,
 	})
 	if err != nil {
-		return structs.RR{}, fmt.Errorf("can't marshal message: %w", err)
+		return structs.RR{}, fmt.Errorf("marshal resource record: %w", err)
 	}
-
-	req, err := http.NewRequest(http.MethodPost, t.httpAddr+"/api/rrs/", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, t.httpAddr+path, bytes.NewReader(body))
 	if err != nil {
-		return structs.RR{}, fmt.Errorf("can't create new request: %w", err)
+		return structs.RR{}, fmt.Errorf("create %s %s request: %w", http.MethodPost, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 
 	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return structs.RR{}, fmt.Errorf("can't make request to the server: %w", err)
+		return structs.RR{}, &NetworkError{Method: http.MethodPost, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(resp.Body)
+	msg, err := readResponse(resp, http.MethodPost, path)
 	if err != nil {
-		return structs.RR{}, fmt.Errorf("can't read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return structs.RR{}, fmt.Errorf("%s: %s", resp.Status, string(msg))
+		return structs.RR{}, err
 	}
 
 	record := &crudpb.ResourceRecord{}
-	err = proto.Unmarshal(msg, record)
-	if err != nil {
-		return structs.RR{}, fmt.Errorf("unmarshal server response: %w", err)
+	if err := proto.Unmarshal(msg, record); err != nil {
+		return structs.RR{}, fmt.Errorf("unmarshal %s %s response: %w", http.MethodPost, path, err)
 	}
-
 	return structs.RR{
 		ID:     record.Id,
 		Domain: record.Domain,
@@ -197,39 +165,22 @@ func (t Transport) AddRR(rr structs.RR) (structs.RR, error) {
 	}, nil
 }
 
-// DeleteRR sends a DELETE request to the server to delete a resource record by ID.
-// It returns an error if the request fails or if the server responds with a non-OK status.
 func (t Transport) DeleteRR(id int64) error {
-	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+"/api/rrs/"+strconv.FormatInt(id, 10), http.NoBody)
+	path := "/api/rrs/" + strconv.FormatInt(id, 10)
+	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+path, http.NoBody)
 	if err != nil {
-		return fmt.Errorf("can't create new request: %w", err)
+		return fmt.Errorf("create %s %s request: %w", http.MethodDelete, path, err)
 	}
-
-	r, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("can't make request to the server: %w", err)
+		return &NetworkError{Method: http.MethodDelete, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(r.Body)
-	if err != nil {
-		return fmt.Errorf("can't read response body: %w", err)
-	}
-	if r.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: %s", r.Status, string(msg))
-	}
-
-	return nil
+	_, err = readResponse(resp, http.MethodDelete, path)
+	return err
 }
 
-// RegisterNewUser sends a registration request to the server with the provided user information
-// and returns the registered user or an error.
 func (t Transport) RegisterNewUser(user structs.User) (structs.User, error) {
+	const path = "/auth/register"
 	credentials := &crudpb.Register{
 		Login:     user.Login,
 		FirstName: user.FirstName,
@@ -237,45 +188,30 @@ func (t Transport) RegisterNewUser(user structs.User) (structs.User, error) {
 		Role:      user.Role,
 		Password:  user.Password,
 	}
-
 	b, err := proto.Marshal(credentials)
 	if err != nil {
-		return structs.User{}, fmt.Errorf("can't marshal message: %w", err)
+		return structs.User{}, fmt.Errorf("marshal register request: %w", err)
 	}
-
-	req, err := http.NewRequest(http.MethodPost, t.httpAddr+"/auth/register", bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, t.httpAddr+path, bytes.NewReader(b))
 	if err != nil {
-		return structs.User{}, fmt.Errorf("can't create new request: %w", err)
+		return structs.User{}, fmt.Errorf("create %s %s request: %w", http.MethodPost, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Accept", "application/protobuf")
 
-	r, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return structs.User{}, fmt.Errorf("can't make request to the server: %w", err)
+		return structs.User{}, &NetworkError{Method: http.MethodPost, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(r.Body)
+	msg, err := readResponse(resp, http.MethodPost, path)
 	if err != nil {
-		return structs.User{}, fmt.Errorf("can't read response body: %w", err)
-	}
-
-	if r.StatusCode != http.StatusOK {
-		return structs.User{}, fmt.Errorf("%s: %s", r.Status, string(msg))
+		return structs.User{}, err
 	}
 
 	u := &crudpb.User{}
-	err = proto.Unmarshal(msg, u)
-	if err != nil {
-		return structs.User{}, fmt.Errorf("can't unmarshal response: %w", err)
+	if err := proto.Unmarshal(msg, u); err != nil {
+		return structs.User{}, fmt.Errorf("unmarshal %s %s response: %w", http.MethodPost, path, err)
 	}
-
 	return structs.User{
 		ID:        u.Id,
 		Login:     u.Login,
@@ -285,85 +221,60 @@ func (t Transport) RegisterNewUser(user structs.User) (structs.User, error) {
 	}, nil
 }
 
-// Login sends a login request to the server with the provided credentials
-// and returns the authenticated user or an error.
 func (t Transport) Login(login, password string) (*crudpb.User, error) {
+	const path = "/auth/login"
 	credentials := &crudpb.Login{
 		Username: login,
 		Password: password,
 	}
-
 	b, err := proto.Marshal(credentials)
 	if err != nil {
-		return nil, fmt.Errorf("can't marshal message: %w", err)
+		return nil, fmt.Errorf("marshal login request: %w", err)
 	}
-
-	req, err := http.NewRequest(http.MethodPost, t.httpAddr+"/auth/login", bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, t.httpAddr+path, bytes.NewReader(b))
 	if err != nil {
-		return nil, fmt.Errorf("can't create new request: %w", err)
+		return nil, fmt.Errorf("create %s %s request: %w", http.MethodPost, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Accept", "application/protobuf")
 
-	r, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("can't make request to the server: %w", err)
+		return nil, &NetworkError{Method: http.MethodPost, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(r.Body)
+	msg, err := readResponse(resp, http.MethodPost, path)
 	if err != nil {
-		return nil, fmt.Errorf("can't read response body: %w", err)
-	}
-	if r.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: %s", r.Status, string(msg))
+		return nil, err
 	}
 
 	user := &crudpb.User{}
-	err = proto.Unmarshal(msg, user)
-	if err != nil {
-		return nil, fmt.Errorf("can't unmarshal response: %w", err)
+	if err := proto.Unmarshal(msg, user); err != nil {
+		return nil, fmt.Errorf("unmarshal %s %s response: %w", http.MethodPost, path, err)
 	}
 	return user, nil
 }
 
-// GetAllUsers retrieves all users from the server.
 func (t Transport) GetAllUsers() ([]structs.User, error) {
-	req, err := http.NewRequest(http.MethodGet, t.httpAddr+"/api/users/all", http.NoBody)
+	const path = "/api/users/all"
+	req, err := http.NewRequest(http.MethodGet, t.httpAddr+path, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("can't create new request: %w", err)
+		return nil, fmt.Errorf("create %s %s request: %w", http.MethodGet, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Accept", "application/protobuf")
 
-	r, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("can't make request to the server: %w", err)
+		return nil, &NetworkError{Method: http.MethodGet, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(r.Body)
+	msg, err := readResponse(resp, http.MethodGet, path)
 	if err != nil {
-		return nil, fmt.Errorf("can't read response body: %w", err)
-	}
-	if r.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: %s", r.Status, string(msg))
+		return nil, err
 	}
 
 	users := &crudpb.UserCollection{}
-	err = proto.Unmarshal(msg, users)
-	if err != nil {
-		return nil, fmt.Errorf("can't unmarshal response: %w", err)
+	if err := proto.Unmarshal(msg, users); err != nil {
+		return nil, fmt.Errorf("unmarshal %s %s response: %w", http.MethodGet, path, err)
 	}
 	result := make([]structs.User, 0, len(users.Users))
 	for _, user := range users.Users {
@@ -378,68 +289,41 @@ func (t Transport) GetAllUsers() ([]structs.User, error) {
 	return result, nil
 }
 
-// DeleteUser sends a DELETE request to the server to delete a user by ID.
-// It returns an error if the request fails or if the server responds with a non-OK status.
 func (t Transport) DeleteUser(id int64) error {
-	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+"/api/users/"+strconv.FormatInt(id, 10), http.NoBody)
+	path := "/api/users/" + strconv.FormatInt(id, 10)
+	req, err := http.NewRequest(http.MethodDelete, t.httpAddr+path, http.NoBody)
 	if err != nil {
-		return fmt.Errorf("can't create new request: %w", err)
+		return fmt.Errorf("create %s %s request: %w", http.MethodDelete, path, err)
 	}
-
-	r, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("can't make request to the server: %w", err)
+		return &NetworkError{Method: http.MethodDelete, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(r.Body)
-	if err != nil {
-		return fmt.Errorf("can't read response body: %w", err)
-	}
-	if r.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: %s", r.Status, string(msg))
-	}
-
-	return nil
+	_, err = readResponse(resp, http.MethodDelete, path)
+	return err
 }
 
-// GetAllLogs retrieves all logs from the server.
 func (t Transport) GetAllLogs() ([]structs.Log, error) {
-	req, err := http.NewRequest(http.MethodGet, t.httpAddr+"/api/logs/all", http.NoBody)
+	const path = "/api/logs/all"
+	req, err := http.NewRequest(http.MethodGet, t.httpAddr+path, http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("can't create new request: %w", err)
+		return nil, fmt.Errorf("create %s %s request: %w", http.MethodGet, path, err)
 	}
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Accept", "application/protobuf")
 
-	r, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("can't make request to the server: %w", err)
+		return nil, &NetworkError{Method: http.MethodGet, Addr: t.httpAddr + path, Err: err}
 	}
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close response body: %v\n", err)
-		}
-	}()
-
-	msg, err := io.ReadAll(r.Body)
+	msg, err := readResponse(resp, http.MethodGet, path)
 	if err != nil {
-		return nil, fmt.Errorf("can't read response body: %w", err)
-	}
-	if r.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: %s", r.Status, string(msg))
+		return nil, err
 	}
 
 	logs := &crudpb.LogCollection{}
-	err = proto.Unmarshal(msg, logs)
-	if err != nil {
-		return nil, fmt.Errorf("can't unmarshal response: %w", err)
+	if err := proto.Unmarshal(msg, logs); err != nil {
+		return nil, fmt.Errorf("unmarshal %s %s response: %w", http.MethodGet, path, err)
 	}
 	result := make([]structs.Log, 0, len(logs.Logs))
 	for _, log := range logs.Logs {

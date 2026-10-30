@@ -50,10 +50,10 @@ func (s Server) timeoutMiddleware(t time.Duration) func(http.Handler) http.Handl
 func (s Server) authorizationMiddleware(allowed []string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := r.Context().Value("user").(database.User)
+			user, ok := r.Context().Value(contextKeyUser).(database.User)
 			if !ok {
 				slog.Error("can't get user from context for authorization")
-				http.Error(w, "Internal error, try later", http.StatusInternalServerError)
+				http.Error(w, "Not authenticated", http.StatusForbidden)
 				return
 			}
 

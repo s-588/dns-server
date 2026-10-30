@@ -37,9 +37,19 @@ type AddModel struct {
 
 // NewAddModel creates a new add model.
 func NewAddModel(table *table.Model, t *transport.Transport, width int) AddModel {
+	inputs := make([]textinput.Model, len(table.Descriptor.InputFields))
+	for i := range table.Descriptor.InputFields {
+		inputs[i] = table.Descriptor.InputFields[i]
+		inputs[i].Reset()
+		inputs[i].Blur()
+	}
+	if len(inputs) > 0 {
+		inputs[0].Focus()
+	}
+
 	return AddModel{
 		width:       width,
-		inputFields: table.Descriptor.InputFields,
+		inputFields: inputs,
 		table:       table,
 		buttons:     []string{"Yes", "No"},
 		transport:   t,

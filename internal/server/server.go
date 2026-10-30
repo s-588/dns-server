@@ -105,7 +105,7 @@ func (s Server) serveHTTP(ws *WebSocket) {
 			r.Use(s.authorizationMiddleware(adminRights))
 			r.Get("/all", s.getAllUsersHandler)
 			r.Get("/{id}", s.getUserHandler)
-			r.Delete("/", s.deleteUserHandler)
+			r.Delete("/{id}", s.deleteUserHandler)
 			r.Patch("/", s.patchUserHandler)
 		})
 

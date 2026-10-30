@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -21,6 +22,7 @@ import (
 	"github.com/prionis/dns-server/cmd/tui/model/table"
 	"github.com/prionis/dns-server/cmd/tui/structs"
 	"github.com/prionis/dns-server/cmd/tui/transport"
+	"github.com/prionis/dns-server/internal/server"
 )
 
 const (
@@ -210,7 +212,21 @@ func NewModel() (model, error) {
 	}
 	w, h = w-8, max(3, h-20)
 
-	t, err := transport.New("172.31.155.196:8083")
+	server.LoadEnvs()
+	host := strings.TrimSpace(os.Getenv("HTTP_HOST"))
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := strings.TrimSpace(os.Getenv("HTTP_PORT"))
+	if port == "" {
+		port = ":8083" // matches NewServer built-in default
+	}
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
+	}
+	addr := host + port
+
+	t, err := transport.New(addr)
 	if err != nil {
 		return model{}, fmt.Errorf("can't create http transport: %w", err)
 	}
@@ -245,5 +261,5 @@ func (m model) Close() tea.Cmd {
 
 // Initialize essential things.
 func (m model) Init() tea.Cmd {
-	return tea.Batch(popup.ListenForPopupMsg(m.popup.MsgChan))
+	return nil
 }

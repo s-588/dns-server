@@ -36,9 +36,55 @@ var (
 			Bold(true)
 )
 
+// defaultLogPath is used when no LOG_FILE environment variable is set.
+const defaultLogPath = "DNSServer.log"
+
+// apiBaseURL returns the HTTP(S) base URL for the server API.
+// It uses environment variables (loaded via server.LoadEnvs) or sensible defaults.
+// Defaults: http://127.0.0.1:8083
+func apiBaseURL() string {
+	server.LoadEnvs()
+
+	host := strings.TrimSpace(os.Getenv("HTTP_HOST"))
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
+	port := strings.TrimSpace(os.Getenv("HTTP_PORT"))
+	if port == "" {
+		port = ":8083" // matches NewServer built-in default
+	}
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
+	}
+
+	scheme := "http"
+	if v := strings.TrimSpace(os.Getenv("HTTPS")); v != "" {
+		enable, err := strconv.ParseBool(v)
+		if err != nil {
+			lower := strings.ToLower(v)
+			enable = lower == "1" || lower == "yes" || lower == "on" || lower == "true"
+		}
+		if enable {
+			scheme = "https"
+		}
+	}
+
+	return scheme + "://" + host + port
+}
+
+// logPath returns the path to the log file (from LOG_FILE env or default).
+func logPath() string {
+	server.LoadEnvs()
+	if p := strings.TrimSpace(os.Getenv("LOG_FILE")); p != "" {
+		return p
+	}
+	return defaultLogPath
+}
+
 // AddRR takes a DNS record in RFC 1035 format, marshals it into a protobuf message,
 // and sends it to the server's HTTP API to add the record to the database.
-func AddRR(arg string, addr, port string) {
+func AddRR(arg string) {
 	rr, err := dns.NewRR(arg)
 	if err != nil {
 		printError("Add accept DNS records in RFC 1035 format(ex. \"example.com. 3600 IN A 127.0.0.1\" )")
@@ -58,7 +104,7 @@ func AddRR(arg string, addr, port string) {
 		return
 	}
 
-	req, err := http.NewRequest(http.MethodPost, addr+port+"/api/rr", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, apiBaseURL()+"/api/rr", bytes.NewReader(body))
 	if err != nil {
 		printError("can't create request: " + err.Error())
 		return
@@ -83,8 +129,8 @@ func AddRR(arg string, addr, port string) {
 }
 
 // DelRR sends a delete request to the server's HTTP API to remove a DNS record by its ID.
-func DelRR(id int64, addr, port string) {
-	req, err := http.NewRequest(http.MethodDelete, addr+port+"/api/rr/"+strconv.FormatInt(id, 10), http.NoBody)
+func DelRR(id int64) {
+	req, err := http.NewRequest(http.MethodDelete, apiBaseURL()+"/api/rr/"+strconv.FormatInt(id, 10), http.NoBody)
 	if err != nil {
 		printError("Can't create request. Error: " + err.Error())
 		return
@@ -92,7 +138,7 @@ func DelRR(id int64, addr, port string) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		printError("Can't make request to the server by address: " + addr + port + ". Error: " + err.Error())
+		printError("Can't make request to the server by address: " + apiBaseURL() + ". Error: " + err.Error())
 		return
 	}
 
@@ -109,9 +155,12 @@ func DelRR(id int64, addr, port string) {
 }
 
 // StartServer initializes and starts the DNS and HTTP servers.
-func StartServer(logPath string, opts ...server.Option) {
+// Configuration comes from environment variables (DNS_PORT, HTTP_PORT, HTTPS, LOG_FILE)
+// or built-in defaults.
+func StartServer() {
 	server.LoadEnvs()
-	logFile, err := os.OpenFile(filepath.Clean(logPath), os.O_RDWR|os.O_CREATE, 0o600)
+	lp := logPath()
+	logFile, err := os.OpenFile(filepath.Clean(lp), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		printError("can't open log file\n" + err.Error())
 		return
@@ -130,8 +179,7 @@ func StartServer(logPath string, opts ...server.Option) {
 	}
 	logger.Info("connection with database established")
 
-	config := append(server.OptionsFromEnv(), opts...)
-	config = append(config, server.WithDB(db))
+	config := append(server.OptionsFromEnv(), server.WithDB(db))
 	s, err := server.NewServer(config...)
 	if err != nil {
 		printError(fmt.Sprintf("can't create new server\n%s", err.Error()))
@@ -153,8 +201,9 @@ type log struct {
 
 // PrintLogList reads a log file unmarshaling each line into a log struct,
 // and prints the formatted log entries to stdout.
-func PrintLogList(logPath string) {
-	file, err := os.Open(filepath.Clean(logPath))
+func PrintLogList() {
+	lp := logPath()
+	file, err := os.Open(filepath.Clean(lp))
 	if err != nil {
 		printError("can't open log file\n" + err.Error())
 		return
@@ -193,8 +242,8 @@ func PrintLogList(logPath string) {
 }
 
 // PrintRRList sends a request to the server's HTTP API to retrieve all DNS records, and prints to stdout.
-func PrintRRList(addr, port string) {
-	req, err := http.NewRequest(http.MethodGet, "http://"+addr+port+"/api/rr/all", http.NoBody)
+func PrintRRList() {
+	req, err := http.NewRequest(http.MethodGet, apiBaseURL()+"/api/rr/all", http.NoBody)
 	if err != nil {
 		printError("can't create request: " + err.Error())
 		return
@@ -218,12 +267,12 @@ func PrintRRList(addr, port string) {
 	}
 
 	if resp.StatusCode == http.StatusOK {
-		printSuccess("Record was added")
-	} else {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			printError("can't read response body from server")
+		printSuccess("Records retrieved")
+		// TODO: actually print the records (original code had a bug here)
+		for _, rr := range rrs.Records {
+			fmt.Printf("%d %s %d %s %s %s\n", rr.Id, rr.Domain, rr.Ttl, rr.Class, rr.Type, rr.Data)
 		}
+	} else {
 		printError(resp.Status + string(body))
 	}
 }

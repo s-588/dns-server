@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -45,7 +44,6 @@ func (dm DeleteModel) Init() tea.Cmd {
 	return nil
 }
 
-// Update process the user interactions.
 func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -59,70 +57,47 @@ func (d DeleteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				d.cursor++
 			}
 		case "enter", " ":
-			// Button "Yes" is pressed
-			if d.cursor == 0 {
-				id, err := strconv.ParseInt(d.table.Table.SelectedRow()[0], 10, 32)
+			if d.cursor == 0 { // Yes
+				row := d.table.Table.SelectedRow()
+				if len(row) == 0 {
+					return d, popup.Error("no row selected", "")
+				}
+				id, err := strconv.ParseInt(row[0], 10, 32)
 				if err != nil {
-					return d, func() tea.Msg {
-						return popup.Msg{
-							Level:    "ERROR",
-							Msg:      fmt.Sprintf("Invalid record ID: %v", err),
-							Duration: 4 * time.Second,
-						}
-					}
+					return d, popup.Error(fmt.Sprintf("invalid record id: %v", err), "")
+				}
+				if d.table.Descriptor.DeleteFn == nil {
+					return d, popup.Error("delete is not supported for this table", "")
 				}
 				return d, func() tea.Msg { return DeleteMsg{id: id} }
 			}
-
-			return d, tea.Batch(func() tea.Msg {
-				return popup.Msg{
-					Level: "INFO", Msg: "Deletion canceled",
-					Duration: 4 * time.Second,
-				}
-			}, func() tea.Msg {
-				return DeleteCancelMsg{}
-			})
-
-		case "Esc":
-			return d, tea.Batch(func() tea.Msg {
-				return popup.Msg{Level: "INFO", Msg: "Deletion canceled", Duration: 4 * time.Second}
-			}, func() tea.Msg {
-				return DeleteCancelMsg{}
-			})
+			return d, tea.Batch(
+				popup.Info("Deletion canceled", ""),
+				func() tea.Msg { return DeleteCancelMsg{} },
+			)
+		case "esc", "ctrl+c": // was "Esc" — never matched
+			return d, tea.Batch(
+				popup.Info("Deletion canceled", ""),
+				func() tea.Msg { return DeleteCancelMsg{} },
+			)
 		}
+
 	case DeleteMsg:
-		err := d.delete(msg.id)
-		if err != nil {
-			return d, func() tea.Msg {
-				return popup.Msg{
-					Level: "ERROR", Msg: "Can't delete record",
-					Duration: 4 * time.Second,
-				}
-			}
+		if err := d.delete(msg.id); err != nil {
+			return d, popup.Error(transport.UserMessage(err), "")
 		}
-		return d, tea.Batch(func() tea.Msg {
-			return popup.Msg{
-				Level:    "SUCCESS",
-				Msg:      "Record successfully deleted",
-				Duration: 4 * time.Second,
-			}
-		},
-			func() tea.Msg {
-				return DeleteSuccessMsg{
-					ID: msg.id,
-				}
-			})
+		return d, tea.Batch(
+			popup.Success("Record successfully deleted", ""),
+			func() tea.Msg { return DeleteSuccessMsg{ID: msg.id} },
+		)
 	}
 	return d, nil
 }
 
-// Delete record from database.
+// delete removes a record via the table's descriptor, so the request is
+// routed to the correct endpoint (RRs vs users).
 func (d DeleteModel) delete(id int64) error {
-	err := d.transport.DeleteRR(id)
-	if err != nil {
-		return fmt.Errorf("can't delete from database: %w", err)
-	}
-	return nil
+	return d.table.Descriptor.DeleteFn(d.transport, id)
 }
 
 // View renders the delete model.

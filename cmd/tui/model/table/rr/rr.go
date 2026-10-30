@@ -150,7 +150,7 @@ func AddFn(transport *transport.Transport, inputFields []textinput.Model) (bubbl
 	if ttlStr == "" {
 		ttlStr = "3600"
 	}
-	ttl, err := strconv.ParseUint(ttlStr, 32, 10)
+	ttl, err := strconv.ParseUint(ttlStr, 10, 32)
 	if err != nil {
 		return bubbleTable.Row{}, errors.New("bad TTL")
 	}
@@ -165,7 +165,7 @@ func AddFn(transport *transport.Transport, inputFields []textinput.Model) (bubbl
 	}
 	return bubbleTable.Row{
 		strconv.FormatInt(rr.ID, 10),
-		rr.Domain, rr.Type, rr.Class, rr.Data,
+		rr.Domain, rr.Data, rr.Type, rr.Class,
 		ttlStr,
 	}, nil
 }
@@ -180,13 +180,13 @@ func GetInputFields(width int) []textinput.Model {
 		input.Prompt = "* > "
 		switch i {
 		case 0:
-			setupDomainInput(input)
+			input = setupDomainInput(input)
 		case 1:
 			input.Placeholder = "Data"
 		case 2:
-			setuppTypeInput(input)
+			input = setupTypeInput(input)
 		case 3:
-			setupClassInput(input)
+			input = setupClassInput(input)
 		case 4:
 			input = setupTTLInput(input)
 		}
@@ -211,7 +211,7 @@ func setupTTLInput(input textinput.Model) textinput.Model {
 	return input
 }
 
-func setupClassInput(input textinput.Model) {
+func setupClassInput(input textinput.Model) textinput.Model {
 	input.Placeholder = "Class"
 	input.ShowSuggestions = true
 	input.Validate = func(s string) error {
@@ -225,9 +225,10 @@ func setupClassInput(input textinput.Model) {
 		return nil
 	}
 	input.SetSuggestions([]string{"IN", "CS", "CH", "HS"})
+	return input
 }
 
-func setuppTypeInput(input textinput.Model) {
+func setupTypeInput(input textinput.Model) textinput.Model {
 	input.Placeholder = "Type"
 	input.ShowSuggestions = true
 	input.Validate = func(s string) error {
@@ -244,9 +245,10 @@ func setuppTypeInput(input textinput.Model) {
 		"A", "NS", "MD", "MF", "CNAME", "SOA", "MB", "MG", "MR",
 		"NULL", "WKS", "PTR", "HINFO", "MINFO", "MX", "TXT",
 	})
+	return input
 }
 
-func setupDomainInput(input textinput.Model) {
+func setupDomainInput(input textinput.Model) textinput.Model {
 	input.Placeholder = "Domain name"
 	input.Validate = func(s string) error {
 		if s == "" {
@@ -259,6 +261,7 @@ func setupDomainInput(input textinput.Model) {
 		return errors.New("incorrect domain name")
 	}
 	input.Focus()
+	return input
 }
 
 // GetFilterFields returns the input fields for filtering resource records based on the provided width.

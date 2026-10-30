@@ -241,8 +241,8 @@ func (s Server) loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(b)
 	if err != nil {
 		slog.Error("can't write response for user " + user.Login + ": " + err.Error())
@@ -312,8 +312,8 @@ func (s Server) registerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(b)
 	if err != nil {
 		slog.Error("can't write response for user", "login", credentials.Login, "error", err)
@@ -358,6 +358,7 @@ func (s Server) getRecordHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Add("Content-Type", "application/protobuf")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(body)
 	if err != nil {
@@ -400,8 +401,8 @@ func (s Server) getAllRecordsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(resp)
 	if err != nil {
 		slog.Error("can't write response for resource records", "error", err)
@@ -439,6 +440,7 @@ func (s Server) getUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Add("Content-Type", "application/protobuf")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(b)
 	if err != nil {
@@ -474,8 +476,8 @@ func (s Server) getAllUsersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(resp)
 	if err != nil {
 		slog.Error("can't write response for user collection", "error", err)
@@ -522,6 +524,8 @@ func (s Server) deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		WriteDBError(w, err)
 		return
 	}
+
+	w.Header().Add("Content-Type", "application/protobuf")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write([]byte(
 		html.EscapeString(
@@ -600,6 +604,7 @@ func (s Server) deleteRRHandler(w http.ResponseWriter, r *http.Request) {
 		WriteDBError(w, err)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write([]byte(
 		html.EscapeString(
@@ -668,8 +673,8 @@ func (s Server) postRRHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(result)
 	if err != nil {
 		slog.Error("can't write response for resource record creation: " + err.Error())
@@ -737,6 +742,11 @@ func (s Server) getAllLogsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	defer func() {
+		if cerr := file.Close(); cerr != nil {
+			slog.Error("can't close log file", "error", cerr)
+		}
+	}()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		if err := scanner.Err(); err != nil {
@@ -784,8 +794,8 @@ func (s Server) getAllLogsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "application/protobuf")
+	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(resp)
 	if err != nil {
 		slog.Error("can't write response for logs", "error", err)

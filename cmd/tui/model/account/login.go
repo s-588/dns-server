@@ -142,7 +142,7 @@ func processEnter(m LoginModel, msg tea.KeyMsg) (LoginModel, tea.Cmd) {
 
 			user, err := m.login(login, password)
 			if err != nil {
-				return m, popup.Error(fmt.Sprintf("can't login: %v", err), "")
+				return m, popup.Error(transport.UserMessage(err), "")
 			}
 
 			return m, tea.Batch(
@@ -168,7 +168,7 @@ func processEnter(m LoginModel, msg tea.KeyMsg) (LoginModel, tea.Cmd) {
 func (m LoginModel) login(login, password string) (*structs.User, error) {
 	user, err := m.transport.Login(login, password)
 	if err != nil {
-		return nil, fmt.Errorf("can't login: %w", err)
+		return nil, err
 	}
 	return &structs.User{
 		Login:     user.Login,

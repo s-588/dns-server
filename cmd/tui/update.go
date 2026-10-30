@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -236,12 +237,21 @@ func (m model) HandleLoginMsgs(msg tea.Msg) (model, tea.Cmd) {
 			tables = append(tables, usert)
 		}
 
-		err = m.transport.EstablishWebsocketConnection(m.transport.HTTPClient.Jar, m.transport.Addr)
+		// Websocket is only needed for real-time log streaming. If it fails,
+		// the Logs table can still be refreshed over HTTP, so warn and proceed.
+		err = m.transport.EstablishWebsocketConnection(
+			m.transport.HTTPClient.Jar, m.transport.Addr,
+		)
 		if err != nil {
-			return m, popup.Error("can't connect to the logs websocket: "+err.Error(), "")
+			slog.Error("can't establish websocket connection", "error", err)
+			cmd = popup.Warning(
+				"real-time log stream unavailable, use Refresh to update logs", "",
+			)
+		} else {
+			go m.transport.ListenWebSocket(m.logChan)
+			cmd = logTable.WaitforLogs(m.logChan)
 		}
-		go m.transport.ListenWebSocket(m.logChan)
-		cmd = logTable.WaitforLogs(m.logChan)
+
 		tabs := []string{"Logs", "Resource records"}
 		if msg.User.Role == "admin" {
 			tabs = []string{"Logs", "Resource records", "Users"}
@@ -446,7 +456,7 @@ func processDefaultLayer(msg tea.KeyMsg, m model) (model, tea.Cmd) {
 		return processLeftKeys(m, msg)
 
 	case key.Matches(msg, m.keys.Enter):
-		processEnterKeys(m, msg)
+		return processEnterKeys(m, msg)
 
 		// Delete key
 	case key.Matches(msg, m.keys.Delete):
@@ -715,6 +725,5 @@ func processDeleteLayer(m model, msg tea.KeyMsg) (model, tea.Cmd) {
 	if v, ok := model.(crud.DeleteModel); ok {
 		m.deletePage = v
 	}
-	m.focusLayer = focusButtons
 	return m, cmd
 }

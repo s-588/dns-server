@@ -300,20 +300,14 @@ func FilterFn(inputs []textinput.Model, rows []bubbleTable.Row) ([]bubbleTable.R
 	result := make([]bubbleTable.Row, 0)
 	fname, lname, role := inputs[0].Value(), inputs[1].Value(), inputs[2].Value()
 	for _, row := range rows {
-		if fname != "" {
-			if fname != row[2] {
-				continue
-			}
+		if fname != "" && fname != row[2] {
+			continue
 		}
-		if lname != "" {
-			if fname != row[3] {
-				continue
-			}
+		if lname != "" && lname != row[3] {
+			continue
 		}
-		if role != "" {
-			if fname != row[4] {
-				continue
-			}
+		if role != "" && role != row[4] {
+			continue
 		}
 		result = append(result, row)
 	}
@@ -379,7 +373,7 @@ func userButtonsHandler(index int, m table.Model) (table.Model, tea.Cmd) {
 func New(t *transport.Transport, w, h int) (table.Model, error) {
 	users, err := t.GetAllUsers()
 	if err != nil {
-		return table.Model{}, nil
+		return table.Model{}, err
 	}
 	rows := make([]bubbleTable.Row, 0, len(users))
 	for _, u := range users {
