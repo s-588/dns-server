@@ -48,7 +48,7 @@ func Test_RR_RoundTrip(t *testing.T) {
 		Type:     TypeA,
 		Class:    ClassIN,
 		TTL:      88,
-		RDLength: uint16(len(b)), //nolint:gosec // overflow is not expected
+		RDLength: uint16(len(b)),
 		RData:    a,
 	}
 
@@ -80,7 +80,7 @@ func TestMessage_BinaryRoundTrip(t *testing.T) {
 		Type:     TypeA,
 		Class:    ClassIN,
 		TTL:      88,
-		RDLength: uint16(len(b)), //nolint:gosec // overflow is not expected
+		RDLength: uint16(len(b)),
 		RData:    a,
 	}
 	m := &Message{

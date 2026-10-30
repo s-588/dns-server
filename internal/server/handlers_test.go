@@ -29,7 +29,6 @@ func newTestServer(t *testing.T) (Server, *testutil.MockRepository) {
 	}, db
 }
 
-//nolint:funlen
 func Test_parseRR(t *testing.T) {
 	tests := []struct {
 		name    string

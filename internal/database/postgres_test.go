@@ -52,7 +52,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-//nolint:funlen
 func TestAddUser(t *testing.T) {
 	tests := []struct {
 		name      string

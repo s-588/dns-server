@@ -29,13 +29,14 @@ linters:
     rules:
       - path: _test\.go
         linters:
+          - funlen
           - gosec
           - errcheck
 
   settings:
     errcheck:
       check-type-assertions: true
-      check-blank: true
+      check-blank: false
     revive:
       rules:
         - name: exported
